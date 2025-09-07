@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { User, Lock, Mail, Facebook, Github, Linkedin, Chrome } from "lucide-react";
 import { z } from "zod";
+import {handleRegister} from '@/handlers/handleRegister'
+import {handleLogin} from '@/handlers/handleLogin'
+import { supabaseAdmin } from "@/lib/supabase"; // adjust import to your setup
+import { loginSchema } from "@/lib/validations/validations"; // your Zod schema
 import { createClient } from "@supabase/supabase-js";
 
 // Initialize Supabase client
@@ -9,97 +13,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Validation schemas using Zod
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
-const registrationSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
 const LoginSignupForm: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
-
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const data = {
-      username: formData.get("username") as string,
-      password: formData.get("password") as string,
-    };
-
-    const result = loginSchema.safeParse(data);
-    if (!result.success) {
-      alert(result.error.errors.map((err) => err.message).join("\n"));
-      return;
-    }
-
-    try {
-      const { data: user, error } = await supabase
-        .from("users")
-        .select("username, password")
-        .eq("username", data.username)
-        .single();
-
-      if (error) {
-        alert("User not found or an error occurred.");
-        return;
-      }
-
-      if (user.password !== data.password) {
-        alert("Invalid password.");
-        return;
-      }
-
-      alert("Login successful!");
-      console.log("User data:", user);
-    } catch (err) {
-      console.error("Error verifying login:", err);
-      alert("An unexpected error occurred.");
-    }
-  };
-
-  const handleRegister = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const data = {
-      username: formData.get("username") as string,
-      email: formData.get("email") as string,
-      password: formData.get("password") as string,
-    };
-
-    const result = registrationSchema.safeParse(data);
-    if (!result.success) {
-      alert(result.error.errors.map((err) => err.message).join("\n"));
-      return;
-    }
-
-    try {
-      const { error } = await supabase.from("users").insert([data]);
-
-      if (error) {
-        alert("An error occurred while registering the user.");
-        console.error("Error saving user data:", error);
-        return;
-      }
-
-      alert("Registration successful!");
-      console.log("User registered:", data);
-    } catch (err) {
-      console.error("Error during registration:", err);
-      alert("An unexpected error occurred.");
-    }
-  };
-
   return (
     <div className="flex justify-center items-center min-h-screen bg-gradient-to-r from-gray-200 to-indigo-200">
       <div className="relative w-[850px] h-[550px] bg-[#ffffff] rounded-[30px] shadow-2xl overflow-hidden">
           
-{/* Login Form */}
+  {/* Login Form */}
         <div className={`absolute w-1/2 h-full flex translate-x-[-100%] items-center text-center p-10 z-10 transition-all duration-700 ease-in-out ${isActive ? "translate-x-[100%] opacity-0" : "right-0 opacity-100"}`}>
           <form className="w-full" onSubmit={handleLogin}>
             <h1 className="text-3xl font-bold mb-2">Login</h1>
