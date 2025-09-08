@@ -1,14 +1,14 @@
 import { supabase } from "@/lib/supabase";
 import { loginSchema } from "@/lib/validations/validations";
-import bcrypt from "bcryptjs"; // ✅ Import bcrypt
-import { useRouter } from "next/router";
-import { useAuth } from "@/lib/context/AuthContext";
+import bcrypt from "bcryptjs";
 
-export const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    const { setIsLoggedIn } = useAuth();
-    const router = useRouter();
-
+export const handleLogin = async (
+    event: React.FormEvent<HTMLFormElement>,
+    setIsLoggedIn?: (value: boolean) => void,
+    router?: any
+    ): Promise<string | null> => {
     event.preventDefault();
+
     const formData = new FormData(event.currentTarget);
     const data = {
         username: formData.get("username") as string,
@@ -18,38 +18,47 @@ export const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
   // ✅ Validate with Zod schema
     const result = loginSchema.safeParse(data);
     if (!result.success) {
-        alert(" login schema error " + result.error.errors.map((err) => err.message).join("\n"));
-        return;
+        alert(
+        "Login schema error: " +
+            result.error.errors.map((err) => err.message).join("\n")
+        );
+        return null;
     }
 
     try {
-        // 🔍 Get user from Supabase by username
+        // 🔍 Fetch user from Supabase (include UUID!)
         const { data: user, error } = await supabase
-        .from("users")
-        .select("username, password") // password should be hashed in DB
-        .eq("username", data.username)
-        .single();
+            .from("users")
+            .select("id, username, password") // 👈 fetch uuid too
+            .eq("username", data.username)
+            .single();
 
         if (error || !user) {
-        alert("User not found or an error occurred.");
-        return;
+            alert("User not found or an error occurred.");
+            return null;
         }
 
-        // 🔑 Compare hashed password with entered password
-        const isPasswordValid = await bcrypt.compare(data.password, user.password);
+    // 🔑 Compare hashed password
+        const isPasswordValid = await bcrypt.compare(
+            data.password,
+            user.password
+        );
         if (!isPasswordValid) {
-        alert("Invalid password.");
-        return;
+            alert("Invalid password.");
+            return null;
         }
 
-        setIsLoggedIn(true);
-        localStorage.setItem("isLoggedIn", "true");  
-        router.push("/");
+    // ✅ Simple token (now includes user.id instead of just username)
+    const fakeToken = btoa(`${user.id}:${Date.now()}`);
+
+    // ✅ Backward compatibility
+    if (setIsLoggedIn) setIsLoggedIn(true);
+    if (router) router.push("/");
+
+    return fakeToken;
     } catch (err) {
         console.error("Error verifying login:", err);
         alert("An unexpected error occurred.");
+        return null;
     }
 };
-
-
-
