@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Alert } from '@/components/ui/alert';
 import { BookOpen, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
-import { useAuth } from '@/lib/context/AuthContext'; // import your AuthContext
+import { useAuth } from '@/lib/context/AuthContext';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase';
 
 interface Faculty {
-  Faculty_ID: string;
+  Faculty_ID: string;   // Excel ID like F001
   Name: string;
   Department: string;
   Course_Type: string;
@@ -33,12 +35,12 @@ const defaultCourseData: Course[] = [
 ];
 
 const ExcelPreview: React.FC = () => {
-  const { isLoggedIn } = useAuth(); // get login state from AuthContext
+  const { isLoggedIn } = useAuth();
   const [facultyData, setFacultyData] = useState<Faculty[]>(defaultFacultyData);
   const [courseData, setCourseData] = useState<Course[]>(defaultCourseData);
   const [fileVerified, setFileVerified] = useState(false);
 
-  // Download current Excel template
+  // Download Excel template
   const handleDownload = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(facultyData), 'Faculty_Data');
@@ -46,7 +48,7 @@ const ExcelPreview: React.FC = () => {
     XLSX.writeFile(wb, 'Faculty_Course_Template.xlsx');
   };
 
-  // Upload & Verify file
+  // Upload & Verify Excel
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isLoggedIn) {
       alert('You must be logged in to upload a file!');
@@ -65,7 +67,7 @@ const ExcelPreview: React.FC = () => {
       const wsCourse = workbook.Sheets['Course_Data'];
 
       if (!wsFaculty || !wsCourse) {
-        alert('Excel file must contain "Faculty_Data" and "Course_Data" sheets!');
+        alert('Excel must contain "Faculty_Data" and "Course_Data" sheets!');
         setFileVerified(false);
         return;
       }
@@ -80,16 +82,34 @@ const ExcelPreview: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  // Submit verified data to backend
+  // Submit to backend (with cleaned schema for DB)
   const handleSubmit = async () => {
     if (!isLoggedIn) {
-      alert('You must be logged in to submit the data!');
+      alert('You must be logged in to submit!');
       return;
     }
-    if (!fileVerified) return alert('Please upload and verify a file first!');
+    if (!fileVerified) return alert('Upload and verify first!');
+
     try {
-      await axios.post('/api/upload-excel', { facultyData, courseData });
-      alert('Data successfully submitted to the database!');
+      // Transform Faculty data for DB
+      const formattedFaculty = facultyData.map((f) => ({
+        Faculty_ID: f.Faculty_ID,   // Excel ID → varchar in DB
+        name: f.Name,
+        department: f.Department,
+        course_type: f.Course_Type,
+        max_credits: f.Max_Credits,
+        expertise: f.Expertise,
+      }));
+      const { error } = await supabaseAdmin
+      .from('faculty')
+      .insert(formattedFaculty);
+      if (error) {
+        console.log('error: ', error);
+      } else {
+        alert('Data successfully submitted!');
+        // console.log(data)
+      }
+      
     } catch (error) {
       console.error(error);
       alert('Error submitting data.');
@@ -98,11 +118,10 @@ const ExcelPreview: React.FC = () => {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
+      {/* Upload + Verify */}
       <div className="flex flex-col sm:flex-row items-center justify-center p-4 sm:space-x-6 space-y-4 sm:space-y-0">
-        {/* Upload & Verified Section */}
         <div className="flex items-center space-x-3">
           {isLoggedIn ? (
-            // Logged-in: normal upload button
             <label className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 cursor-pointer transition">
               Upload & Verify File
               <input
@@ -113,9 +132,8 @@ const ExcelPreview: React.FC = () => {
               />
             </label>
           ) : (
-            // Not logged-in: show your Alert component
             <Alert
-              onClick={() => alert('Please log in to upload a file!')}
+              onClick={() => alert('Please log in to upload!')}
               className="cursor-pointer px-6 py-3"
             >
               Please log in to upload a file!
@@ -124,7 +142,7 @@ const ExcelPreview: React.FC = () => {
           {fileVerified && <CheckCircle className="w-6 h-6 text-green-500" />}
         </div>
 
-        {/* Submit Button */}
+        {/* Submit */}
         <div>
           <button
             onClick={handleSubmit}
@@ -140,7 +158,7 @@ const ExcelPreview: React.FC = () => {
         </div>
       </div>
 
-      {/* Preview Tables (Always Visible) */}
+      {/* Faculty Preview */}
       <div className="glass-card p-6 rounded-3xl shadow-lg">
         <h2 className="text-xl font-bold mb-4 flex items-center">
           <BookOpen className="w-5 h-5 mr-2" /> Faculty Data Preview
@@ -167,6 +185,7 @@ const ExcelPreview: React.FC = () => {
         </div>
       </div>
 
+      {/* Course Preview */}
       <div className="glass-card p-6 rounded-3xl shadow-lg">
         <h2 className="text-xl font-bold mb-4 flex items-center">
           <BookOpen className="w-5 h-5 mr-2" /> Course Data Preview
@@ -193,7 +212,7 @@ const ExcelPreview: React.FC = () => {
         </div>
       </div>
 
-      {/* Download Button */}
+      {/* Download Template */}
       <div className="text-center">
         <button
           onClick={handleDownload}
