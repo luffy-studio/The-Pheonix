@@ -91,6 +91,29 @@ export interface Database {
           updated_at?: string
         }
       }
+      users: {
+        Row: {
+          id: string
+          username: string
+          email: string
+          password: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          username: string
+          email: string
+          password: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          username?: string
+          email?: string
+          password?: string
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

@@ -6,11 +6,7 @@ import AppleNavbar from "@/components/AppleNavbar";
 import PreviewCard from "@/components/PreviewCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Download, Edit, RefreshCw, Clock, Users, BookOpen, Share2 } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabase";
 
 interface Subject {
   id: string;
@@ -41,25 +37,61 @@ export default function ViewTimetable() {
   useEffect(() => {
     const fetchTimetableData = async () => {
       setLoading(true);
-      console.log(`Fetching timetable data for class: ${selectedClass}`);
-      const { data: timetables, error: timetableError } = await supabase
-        .from('timetables')
-        .select('*')
-        .eq('class', 'Class 10A');
+      try {
+        // Find the most recent timetable whose name matches the selected class
+        const { data: timetables, error: timetableError } = await supabase
+          .from('timetables')
+          .select('*')
+          .ilike('name', `%${selectedClass}%`)
+          .order('created_at', { ascending: false });
 
-      const { data: subjects, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('*');
+        if (timetableError) {
+          throw timetableError;
+        }
 
-      console.log("Supabase response:", { timetables, timetableError, subjects, subjectsError });
+        const timetable = timetables?.[0];
+        if (!timetable) {
+          setStoredData(null);
+          setLoading(false);
+          return;
+        }
 
-      if (timetableError || subjectsError) {
-        console.error("Error fetching timetable or subjects data:", timetableError || subjectsError);
-        setLoading(false);
-        return;
-      }
+        // Load all subjects and map by id
+        const { data: subjects, error: subjectsError } = await supabase
+          .from('subjects')
+          .select('*');
+        if (subjectsError) {
+          throw subjectsError;
+        }
+        const subjectById = new Map(subjects.map((s: any) => [s.id, s]));
 
-      if (timetables && subjects) {
+        // Load slots for the timetable
+        const { data: slots, error: slotsError } = await supabase
+          .from('timetable_slots')
+          .select('*')
+          .eq('timetable_id', timetable.id);
+        if (slotsError) {
+          throw slotsError;
+        }
+
+        const timetableData: { [key: string]: TimetableEntry } = {};
+        for (const slot of slots || []) {
+          const subject = subjectById.get(slot.subject_id);
+          if (!subject) continue;
+          const key = `${slot.day}-${slot.period}`;
+          timetableData[key] = {
+            subject: {
+              id: subject.id,
+              name: subject.name,
+              code: subject.code,
+              color: subject.color,
+              teacher: subject.teacher,
+              department: subject.department,
+            },
+            timeSlot: `${slot.start_time}-${slot.end_time}`,
+          };
+        }
+
         const formattedData: StoredTimetableData = {
           subjects: subjects.map((subject: any) => ({
             id: subject.id,
@@ -69,14 +101,17 @@ export default function ViewTimetable() {
             teacher: subject.teacher,
             department: subject.department,
           })),
-          timetableData: timetables[0]?.timetable_data || {},
-          generatedAt: timetables[0]?.generated_at || new Date().toISOString(),
+          timetableData,
+          generatedAt: timetable.created_at,
         };
+
         setStoredData(formattedData);
-      } else {
+      } catch (err: any) {
+        console.error('Error fetching timetable data:', err?.message || err);
         setStoredData(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchTimetableData();

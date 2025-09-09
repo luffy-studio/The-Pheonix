@@ -44,7 +44,7 @@ const LoginSignupForm: React.FC = () => {
             isActive ? "translate-x-[100%] opacity-0" : "right-0 opacity-100"
           }`}
         >
-          <form className="w-full"onSubmit={(e) => handleLogin(e, setIsLoggedIn, router)}>
+          <form className="w-full" onSubmit={(e) => handleLogin(e, setIsLoggedIn, router)}>
             <h1 className="text-3xl font-bold mb-2">Login</h1>
             <div className="relative my-6">
               <input
@@ -105,7 +105,7 @@ const LoginSignupForm: React.FC = () => {
             isActive ? "right-0 opacity-100" : "translate-x-[200%] opacity-0"
           }`}
         >
-          <form className="w-full" onSubmit={handleRegister}>
+          <form className="w-full" onSubmit={(e) => handleRegister(e, setIsLoggedIn, router)}>
             <h1 className="text-3xl font-bold mb-2">Registration</h1>
             <div className="relative my-6">
               <input

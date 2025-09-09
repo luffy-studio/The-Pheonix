@@ -131,3 +131,18 @@ ALTER TABLE timetable_slots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all operations on subjects" ON subjects FOR ALL USING (true);
 CREATE POLICY "Allow all operations on timetables" ON timetables FOR ALL USING (true);
 CREATE POLICY "Allow all operations on timetable_slots" ON timetable_slots FOR ALL USING (true);
+
+-- Users table for auth (used by handleRegister and handleLogin)
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY,
+    username VARCHAR(150) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Enable RLS on users
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- For now, permit all operations (tighten later)
+CREATE POLICY "Allow all operations on users" ON users FOR ALL USING (true);
