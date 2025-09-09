@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { BookOpen, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
@@ -100,20 +101,26 @@ const ExcelPreview: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-center justify-center p-4 sm:space-x-6 space-y-4 sm:space-y-0">
         {/* Upload & Verified Section */}
         <div className="flex items-center space-x-3">
-          <label
-            className={`bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 cursor-pointer transition ${
-              !isLoggedIn ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          >
-            Upload & Verify File
-            <input
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleUpload}
-              className="hidden"
-              disabled={!isLoggedIn}
-            />
-          </label>
+          {isLoggedIn ? (
+            // Logged-in: normal upload button
+            <label className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 cursor-pointer transition">
+              Upload & Verify File
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={handleUpload}
+                className="hidden"
+              />
+            </label>
+          ) : (
+            // Not logged-in: show your Alert component
+            <Alert
+              onClick={() => alert('Please log in to upload a file!')}
+              className="cursor-pointer px-6 py-3"
+            >
+              Please log in to upload a file!
+            </Alert>
+          )}
           {fileVerified && <CheckCircle className="w-6 h-6 text-green-500" />}
         </div>
 
