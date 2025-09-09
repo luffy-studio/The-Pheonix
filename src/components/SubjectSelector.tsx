@@ -140,7 +140,7 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-800 flex items-center">
                 <BookOpen className="w-5 h-5 mr-2" />
-                Subjects~
+                Subjects
               </h2>
               <motion.button
                 whileHover={{ scale: 1.05 }}

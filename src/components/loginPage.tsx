@@ -2,7 +2,18 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
-import { User, Lock, Mail, Facebook, Github, Linkedin, Chrome, ArrowLeft } from "lucide-react";
+import {
+  User,
+  Lock,
+  Mail,
+  Facebook,
+  Github,
+  Linkedin,
+  Chrome,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { handleRegister } from "@/handlers/handleRegister";
 import { handleLogin } from "@/handlers/handleLogin";
 
@@ -10,18 +21,17 @@ const LoginSignupForm: React.FC = () => {
   const router = useRouter();
   const [isActive, setIsActive] = useState(false); // false = login, true = register
   const [loading, setLoading] = useState(true);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   const { setIsLoggedIn } = useAuth();
-  // go back to homepage
+
   const handleCloseLogin = () => router.push("/");
 
-  // fake loading state (for future use with LoadingScreen)
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
-
-  // if (loading) return <LoadingScreen />; // uncomment when LoadingScreen is ready
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gradient-to-r from-gray-200 to-indigo-200">
@@ -58,13 +68,18 @@ const LoginSignupForm: React.FC = () => {
             </div>
             <div className="relative my-6">
               <input
-                type="password"
+                type={showLoginPassword ? "text" : "password"}
                 name="password"
                 placeholder="Password"
                 required
                 className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
               />
-              <Lock className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
+              <div
+                className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
+                onClick={() => setShowLoginPassword(!showLoginPassword)}
+              >
+                {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </div>
             </div>
             <div className="text-sm text-right mb-4">
               <a href="#" className="text-gray-600 hover:underline">
@@ -76,10 +91,18 @@ const LoginSignupForm: React.FC = () => {
             </button>
             <p className="mt-5 text-sm">or login with social platforms</p>
             <div className="flex justify-center mt-4 space-x-3">
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Chrome /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Facebook /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Github /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Linkedin /></a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Chrome />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Facebook />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Github />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Linkedin />
+              </a>
             </div>
             <p className="mt-6 text-sm text-gray-600">Don’t have an account?</p>
             <button
@@ -129,23 +152,36 @@ const LoginSignupForm: React.FC = () => {
             </div>
             <div className="relative my-6">
               <input
-                type="password"
+                type={showRegisterPassword ? "text" : "password"}
                 name="password"
                 placeholder="Password"
                 required
                 className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
               />
-              <Lock className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
+              <div
+                className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
+                onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+              >
+                {showRegisterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </div>
             </div>
             <button className="w-full h-12 bg-indigo-400 rounded-md shadow-md text-white font-semibold" type="submit">
               Register
             </button>
             <p className="mt-5 text-sm">or register with social platforms</p>
             <div className="flex justify-center mt-4 space-x-3">
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Chrome /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Facebook /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Github /></a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md"><Linkedin /></a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Chrome />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Facebook />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Github />
+              </a>
+              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
+                <Linkedin />
+              </a>
             </div>
             <p className="mt-6 text-sm text-gray-600">Already have an account?</p>
             <button
