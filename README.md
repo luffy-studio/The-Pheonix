@@ -1,22 +1,8 @@
-# Codev Template
+# THE-PHEONIX
+Transforming Ideas into Limitless Possibilities
 
-This is a Codev template project that includes:
 
-1. Next.js with Pages Router
-2. Tailwind CSS Framework
-3. Context for global state management
 
-## Features
-
-- **Next.js Pages Router**: Utilizes the traditional routing system of Next.js for easy navigation and page management.
-- **Tailwind CSS**: A utility-first CSS framework that provides low-level utility classes to build custom designs quickly and efficiently.
-- **Context API**: Implements React's Context API for efficient global state management.
-
-## Getting Started
-
-1. Clone this repository
-2. Install dependencies:
-   ```
    npm install
    ```
 3. Run the development server:
