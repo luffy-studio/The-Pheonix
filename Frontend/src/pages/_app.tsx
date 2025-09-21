@@ -14,7 +14,7 @@ export default function App({ Component, pageProps }: AppProps) {
     const colorScheme = computedStyle.getPropertyValue('--mode').trim().replace(/"/g, '');
     if (colorScheme === 'dark') {
       document.documentElement.classList.add('dark');
-    } else {
+    } else {  
       document.documentElement.classList.add('light');
     }
     setMounted(true);

@@ -194,38 +194,43 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
 
             {/* Department Filter */}
             <div className="space-y-3">
-              <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
-                Departments
-              </h3>
-              {departments.map((department) => (
-                <motion.button
-                  key={department}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => toggleDepartment(department)}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
-                    expandedDepartments.includes(department)
-                      ? "glass-card text-gray-800"
-                      : "glass hover:bg-white/10 text-gray-600"
-                  }`}
-                >
-                  <span className="font-medium">{department}</span>
-                  {expandedDepartments.includes(department) ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                </motion.button>
-              ))}
+              {/* Responsive, elegant departments list: responsive max-height, scrollbar niceties */}
+              <div className="max-h-28 sm:max-h-40 lg:max-h-48 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300/60 overscroll-contain">
+                <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
+                  Departments
+                </h3>
+                {departments.map((department) => (
+                  <motion.button
+                    key={department}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => toggleDepartment(department)}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
+                      expandedDepartments.includes(department)
+                        ? "glass-card text-gray-800"
+                        : "glass hover:bg-white/10 text-gray-600"
+                    }`}
+                  >
+                    <span className="font-medium">{department}</span>
+                    {expandedDepartments.includes(department) ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </motion.button>
+                ))}
+              </div>
             </div>
 
             {/* Subjects List */}
             <div className="space-y-3">
-              <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
-                Added Subjects ({subjects.length})
-              </h3>
-              <div className="space-y-2">
-                {subjects.map((subject, index) => (
+              {/* Responsive subjects list: larger max-height on wider screens, padding for scrollbar */}
+              <div className="max-h-60 sm:max-h-72 lg:max-h-96 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300/60 overscroll-contain">
+                <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
+                  Added Subjects ({subjects.length})
+                </h3>
+                <div className="space-y-2">
+                  {subjects.map((subject, index) => (
                   <motion.div
                     key={`${subject.Subject_Code}-${index}`}
                     initial={{ opacity: 0, x: 20 }}
@@ -260,6 +265,7 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
                     </div>
                   </motion.div>
                 ))}
+                </div>
               </div>
             </div>
           </div>

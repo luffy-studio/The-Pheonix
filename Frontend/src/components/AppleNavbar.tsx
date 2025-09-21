@@ -11,7 +11,7 @@ const navItems = [
   { name: "Home", href: "/", icon: Home },
   { name: "Create", href: "/create", icon: Plus },
   { name: "Generate", href: "/generate", icon: Zap },
-  { name: "View", href: "/view", icon: Eye },
+  // { name: "View", href: "/view", icon: Eye },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
