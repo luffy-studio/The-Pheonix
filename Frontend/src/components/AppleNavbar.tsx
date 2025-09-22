@@ -39,8 +39,17 @@ const AppleNavbar = () => {
   }, [isLoggedIn]);
 
   const logout = () => {
+    // Clear auth flags and user id from storage
     setIsLoggedIn(false);
     localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("userId");
+    // Reset local UI state
+    setAvatarUrl("");
+    setIsMobileMenuOpen(false);
+    // Force a reload so the app resets to unauthenticated state
+    if (typeof window !== "undefined") {
+      router.reload();
+    }
   };
 
   const handleNavClick = (href: string) => {

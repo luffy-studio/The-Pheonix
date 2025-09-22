@@ -94,12 +94,217 @@ export default function GenerateTimetable() {
     teacher_preferences: {},
     subject_priorities: {}
   });
-  
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [variations, setVariations] = useState<TimetableVariation[]>([]);
   const [selectedVariation, setSelectedVariation] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("basic");
+
+  // --- Export helpers (XLSX with fallback to CSV) ---
+  const downloadFile = (filename: string, content: ArrayBuffer | Blob, mime = "application/octet-stream") => {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+
+  const buildRowsFromTimetable = (timetable: any, variationLabel?: string) => {
+    const rows: Array<Record<string, any>> = [];
+    if (!timetable) return rows;
+
+    // If timetable.classes exists, flatten that structure
+    if (Array.isArray(timetable.classes) && timetable.classes.length > 0) {
+      timetable.classes.forEach((classData: any) => {
+        const className = classData.class_name || classData.name || "";
+        const department = classData.department || "";
+        const schedule = classData.schedule || classData.entries || [];
+        schedule.forEach((entry: any) => {
+          rows.push({
+            Variation: variationLabel ?? timetable.variation ?? "",
+            Class: className,
+            Department: department,
+            Day: entry.day || entry.weekday || "",
+            Period: entry.period ?? "",
+            "Start Time": entry.start_time || entry.time_from || "",
+            "End Time": entry.end_time || entry.time_to || "",
+            Subject: entry.subject || entry.subject_name || "",
+            "Subject Code": entry.subject_code || "",
+            Teacher: entry.teacher || "",
+            Room: entry.room || "",
+            "Subject Type": entry.subject_type || entry.type || ""
+          });
+        });
+      });
+    } else if (timetable.timetableData && typeof timetable.timetableData === "object") {
+      // Fallback flatten timetableData map
+      Object.entries(timetable.timetableData).forEach(([key, entry]: any) => {
+        const [day = "", period = ""] = String(key).split("-");
+        rows.push({
+          Variation: variationLabel ?? timetable.variation ?? "",
+          Class: entry.class_name || entry.class || "",
+          Department: entry.department || "",
+          Day: day,
+          Period: period,
+          "Start Time": entry.start_time || entry.timeSlot || "",
+          "End Time": entry.end_time || "",
+          Subject: entry.subject?.name ?? entry.subject ?? "",
+          "Subject Code": entry.subject_code || "",
+          Teacher: entry.subject?.teacher ?? entry.teacher ?? "",
+          Room: entry.room || "",
+          "Subject Type": entry.subject_type || ""
+        });
+      });
+    }
+
+    return rows;
+  };
+
+  const exportVariationsExcel = async (variationsData: TimetableVariation[]) => {
+    if (!variationsData || variationsData.length === 0) {
+      toast({ title: "No data", description: "No generated variations to export." });
+      return;
+    }
+
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+
+      const makeSafe = (s: string, fallback = "sheet") =>
+        String(s || fallback).replace(/[\[\]\*\?:\/\\]/g, "_").slice(0, 28);
+
+      const headers = [
+        "Day",
+        "Period",
+        "Start Time",
+        "End Time",
+        "Subject",
+        "Subject Code",
+        "Teacher",
+        "Room",
+        "Subject Type",
+      ];
+
+      for (const variation of variationsData) {
+        const vt = variation.timetable;
+        const varLabel = `Variation_${variation.variation ?? "1"}`;
+
+        // If timetable contains per-class array (matches preview), create one sheet per class
+        if (Array.isArray(vt?.classes) && vt.classes.length > 0) {
+          for (const classData of vt.classes) {
+            const className = classData.class_name || classData.name || "Class";
+            const department = classData.department || "";
+            const schedule = classData.schedule || classData.entries || [];
+
+            // Build AOa: title rows + header + data rows (mirrors preview)
+            const aoa: any[] = [];
+            aoa.push([`Class:`, className, `Department:`, department]);
+            aoa.push([]); // empty row
+            aoa.push(headers);
+            for (const entry of schedule) {
+              aoa.push([
+                entry.day || entry.weekday || "",
+                entry.period ?? "",
+                entry.start_time || entry.time_from || "",
+                entry.end_time || entry.time_to || "",
+                entry.subject || entry.subject_name || "",
+                entry.subject_code || "",
+                entry.teacher || "",
+                entry.room || "",
+                entry.subject_type || entry.type || "",
+              ]);
+            }
+
+            const sheetName = `${varLabel}_${makeSafe(className)}`.slice(0, 31);
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+          }
+        } else if (vt?.timetableData && typeof vt.timetableData === "object") {
+          // Fallback: single sheet flattening timetableData map (keeps preview fallback layout)
+          const aoa: any[] = [];
+          aoa.push([`Variation:`, variation.variation ?? "1"]);
+          aoa.push([]);
+          aoa.push(["Class", "Department", ...headers]);
+          Object.entries(vt.timetableData).forEach(([key, entry]: any) => {
+            const [day = "", period = ""] = String(key).split("-");
+            const className = entry.class_name || entry.class || "";
+            const department = entry.department || "";
+            aoa.push([
+              className,
+              department,
+              day,
+              period,
+              entry.start_time || entry.timeSlot || "",
+              entry.end_time || "",
+              entry.subject?.name ?? entry.subject ?? "",
+              entry.subject_code || "",
+              entry.subject?.teacher ?? entry.teacher ?? "",
+              entry.room || "",
+              entry.subject_type || "",
+            ]);
+          });
+          const sheetName = `${varLabel}_Flatten`.slice(0, 31);
+          const ws = XLSX.utils.aoa_to_sheet(aoa);
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        } else {
+          // No structured data: create a minimal sheet with variation label
+          const aoa = [
+            [`Variation`, variation.variation ?? "1"],
+            [],
+            ["Note", "No class schedules available for this variation"],
+          ];
+          const sheetName = `${varLabel}_Empty`.slice(0, 31);
+          const ws = XLSX.utils.aoa_to_sheet(aoa);
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        }
+      }
+
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const filename = `timetable_variations_${new Date().toISOString().slice(0,10)}.xlsx`;
+      downloadFile(filename, blob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      toast({ title: "Exported", description: "Variations exported as Excel file (matches preview layout)." });
+    } catch (err) {
+      console.warn("XLSX export failed, falling back to CSV:", err);
+      // Fallback: previous CSV fallback behavior (export first variation as CSV)
+      const first = variationsData[0];
+      const rows = buildRowsFromTimetable(first.timetable, `Variation ${first.variation ?? 1}`);
+      if (!rows || rows.length === 0) {
+        toast({ title: "Export Failed", description: "No rows available to export." });
+        return;
+      }
+      const headersCsv = Object.keys(rows[0]);
+      const escapeCsv = (v: any) => {
+        if (v === null || v === undefined) return "";
+        const s = String(v);
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const csvRows = [headersCsv.map(escapeCsv).join(",")].concat(
+        rows.map(r => headersCsv.map(h => escapeCsv(r[h])).join(","))
+      );
+      const csvBlob = new Blob([csvRows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+      downloadFile(`timetable_variation_fallback_${new Date().toISOString().slice(0,10)}.csv`, csvBlob, "text/csv;charset=utf-8;");
+      toast({ title: "Exported (CSV)", description: "Fallback CSV exported." });
+    }
+  };
+
+  const exportSelectedOrAll = async () => {
+    if (!variations || variations.length === 0) {
+      toast({ title: "No Variations", description: "Generate variations first." });
+      return;
+    }
+    if (selectedVariation !== null && variations[selectedVariation]) {
+      await exportVariationsExcel([variations[selectedVariation]]);
+    } else {
+      await exportVariationsExcel(variations);
+    }
+  };
+  // --- end export helpers ---
 
   // Mock user ID - in real app, get from auth context
   const userId = "088f7a98-e77c-45e0-9a65-859959a2434d";
@@ -657,7 +862,11 @@ export default function GenerateTimetable() {
                               </CardDescription>
                             </div>
                             <div className="flex space-x-2">
-                              <Button variant="outline" className="glass-card border-0">
+                              <Button
+                                variant="outline"
+                                className="glass-card border-0"
+                                onClick={() => exportSelectedOrAll()}
+                              >
                                 <Download className="w-4 h-4 mr-2" />
                                 Export
                               </Button>

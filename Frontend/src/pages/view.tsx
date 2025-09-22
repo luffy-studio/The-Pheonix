@@ -290,21 +290,46 @@ export default function ViewTimetable() {
   };
 
   const exportTimetable = () => {
-    if (!storedData) return;
-    
-    let csvContent = "Day,Period,Time,Subject,Teacher\n";
+    if (!storedData || !storedData.timetableData) {
+      console.warn("No timetable available for export");
+      return;
+    }
+
+    // CSV value escaper
+    const escapeCsv = (v: any) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const rows: string[] = [];
+    rows.push(["Day", "Period", "Time", "Subject", "Teacher"].map(escapeCsv).join(","));
+
     Object.entries(storedData.timetableData).forEach(([key, entry]) => {
-      const [day, period] = key.split('-');
-      csvContent += `${day},${period},${entry.timeSlot},${entry.subject.name},${entry.subject.teacher}\n`;
+      const [day = "", period = ""] = String(key).split("-");
+      const time = entry?.timeSlot ?? "";
+      const subjectName = entry?.subject?.name ?? entry?.subject ?? "";
+      const teacherName = entry?.subject?.teacher ?? entry?.subject?.teacher ?? "";
+      rows.push([day, period, time, subjectName, teacherName].map(escapeCsv).join(","));
     });
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+
+    const csv = rows.join("\r\n");
+    const base = selectedClass || availableClasses[0] || "timetable";
+    const safeBase = base.replace(/[^\w\-]+/g, "_");
+    const filename = `timetable-${safeBase}.csv`;
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `timetable-${selectedClass}.csv`;
+    a.download = filename;
+    document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => window.URL.revokeObjectURL(url), 100);
   };
 
   const shareTimetable = () => {
