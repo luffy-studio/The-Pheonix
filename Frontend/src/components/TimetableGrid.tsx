@@ -1,34 +1,44 @@
 import React, { useState } from 'react';
-import { Alert } from '@/components/ui/alert';
-import { BookOpen, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BookOpen, CheckCircle, Upload, Trash2, AlertCircle, BarChart3, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { useAuth } from '@/lib/context/AuthContext';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { useRouter } from 'next/router';
 
+// Improved TypeScript interfaces
 interface Faculty {
   Faculty_ID: string;
   Name: string;
   Department: string;
-  Course_Type: string;
+  Course_Type: 'Theory' | 'Lab' | 'Project';
   Max_Credits: number;
   primary_subject: string;
   other_subject: string;
 }
 
 interface Course {
-  department: string;
   Course_Code: string;
   Course_Name: string;
-  Credits: number;
-  Course_Type: string;
-}
-
-interface Rooms {
   department: string;
-  room_number: number;
+  Credits: number;
+  Course_Type: 'Theory' | 'Lab' | 'Project';
 }
 
-// Default template data
+// Default template data with improved structure
 const defaultFacultyData: Faculty[] = [
   {
     Faculty_ID: 'F001',
@@ -36,24 +46,22 @@ const defaultFacultyData: Faculty[] = [
     Department: 'ECE',
     Course_Type: 'Theory',
     Max_Credits: 10,
-    primary_subject: 'Pedagogy',
-    other_subject: 'Sociology',
+    primary_subject: 'Digital Electronics',
+    other_subject: 'Circuit Theory',
   },
 ];
 
 const defaultCourseData: Course[] = [
   {
-    Course_Code: 'EDU101',
-    Course_Name: 'Foundations of Education',
+    Course_Code: 'ECE201',
+    Course_Name: 'Digital Electronics',
     department: 'ECE',
     Credits: 4,
     Course_Type: 'Theory',
   },
 ];
 
-const defaultRoomsData: Rooms[] = [{ department: 'ECE', room_number: 1 }];
-
-const ExcelPreview: React.FC = () => {
+const TimetableGrid: React.FC = () => {
   const { isLoggedIn } = useAuth();
 
   const [facultyData, setFacultyData] = useState<Faculty[]>(defaultFacultyData);
@@ -516,4 +524,4 @@ const ExcelPreview: React.FC = () => {
   );
 };
 
-export default ExcelPreview;
+export default TimetableGrid;

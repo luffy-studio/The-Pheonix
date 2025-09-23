@@ -306,10 +306,14 @@ export default function GenerateTimetable() {
   };
   // --- end export helpers ---
 
-  // Mock user ID - in real app, get from auth context
-  const userId = "088f7a98-e77c-45e0-9a65-859959a2434d";
+  // Get the real user ID from localStorage
+  const userId = localStorage.getItem('userId');
 
   useEffect(() => {
+    if (!userId) {
+      router.push('/login'); // Redirect to login if no user ID found
+      return;
+    }
     loadConfiguration();
   }, []);
 
