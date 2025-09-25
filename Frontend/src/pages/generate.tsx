@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
-import AppleNavbar from "@/components/AppleNavbar";
+import AppleNavbar from "@/components/AppNavbar";
 import AdvancedGenerationOptions from "@/components/AdvancedGenerationOptions";
 import TimetablePreview from "@/components/TimetablePreview";
 import { 

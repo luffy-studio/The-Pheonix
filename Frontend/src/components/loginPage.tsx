@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useRouter } from "next/router";
 import { motion } from "framer-motion";
+// import ForgotPassword from "@/handlers/ForgotPassword";
 import {
   User,
   Lock,
@@ -25,7 +26,7 @@ const LoginSignupForm: React.FC = () => {
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   const { setIsLoggedIn } = useAuth();
-
+  const forgotPassword = () => router.push("/forgot-password");
   const handleCloseLogin = () => router.push("/");
 
   useEffect(() => {
@@ -67,7 +68,7 @@ const LoginSignupForm: React.FC = () => {
               <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
             </div>
             <div className="relative my-6">
-              <input
+              <input  
                 type={showLoginPassword ? "text" : "password"}
                 name="password"
                 placeholder="Password"
@@ -82,7 +83,7 @@ const LoginSignupForm: React.FC = () => {
               </div>
             </div>
             <div className="text-sm text-right mb-4">
-              <a href="#" className="text-gray-600 hover:underline">
+              <a onClick={forgotPassword}  className="text-gray-600 hover:underline">
                 Forgot Password?
               </a>
             </div>

@@ -1,6 +1,6 @@
 import React from 'react';
 import Head from 'next/head';
-import AppleNavbar from '@/components/AppleNavbar';
+import AppleNavbar from '@/components/AppNavbar';
 import SchedulerDashboard from '@/components/SchedulerDashboard';
 
 export default function SchedulerAnalytics() {

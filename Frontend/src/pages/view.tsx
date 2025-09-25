@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import { motion } from "framer-motion";
 import { useRouter } from "next/router";
-import AppleNavbar from "@/components/AppleNavbar";
+import AppleNavbar from "@/components/AppNavbar";
 import PreviewCard from "@/components/PreviewCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Download, Edit, RefreshCw, Clock, Users, BookOpen, Share2, BarChart3, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";

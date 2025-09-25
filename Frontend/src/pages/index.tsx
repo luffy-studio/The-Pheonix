@@ -1,7 +1,7 @@
 import React from "react";
 import Head from "next/head";
-import AppleNavbar from "@/components/AppleNavbar";
-import AppleHero from "@/components/AppleHero";
+import AppleNavbar from "@/components/AppNavbar";
+import AppleHero from "@/components/AppHero";
 import { motion } from "framer-motion";
 import { Calendar, Clock, Users, BookOpen, Sparkles, Zap, Shield } from "lucide-react";
 
