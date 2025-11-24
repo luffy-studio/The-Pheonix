@@ -1,2 +1,3 @@
 web: uvicorn main:app --host 0.0.0.0 --port $PORT
-Python -m uvicorn main:app --reload --port 8000
+Python -m uvicorn Main1:app --reload --port 8000
+ngrok http 8000   
