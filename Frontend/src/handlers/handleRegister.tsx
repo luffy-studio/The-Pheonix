@@ -74,7 +74,7 @@
 
 
 import { registrationSchema } from "@/lib/validations/validations";
-const backend = process.env.BACKEND_URL;
+const backend = process.env.Bckend_url;
 
 type SetIsLoggedIn = (value: boolean) => void;
 

@@ -1,7 +1,7 @@
 import { loginSchema } from "@/lib/validations/validations";
 
 type SetIsLoggedIn = (value: boolean) => void;
-const backend = process.env.BACKEND_URL;
+const backend = process.env.Bckend_url;
 
 export const handleLogin = async (
   event: React.FormEvent<HTMLFormElement>,
