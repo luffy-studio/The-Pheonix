@@ -74,6 +74,7 @@
 
 
 import { registrationSchema } from "@/lib/validations/validations";
+const backend = process.env.BACKEND_URL;
 
 type SetIsLoggedIn = (value: boolean) => void;
 
@@ -99,7 +100,7 @@ export const handleRegister = async (
 
   try {
     // 🔹 Call FastAPI backend
-    const response = await fetch("http://127.0.0.1:8000/auth/register", {
+    const response = await fetch(`${backend}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, email, password }),

@@ -1,6 +1,7 @@
 import { loginSchema } from "@/lib/validations/validations";
 
 type SetIsLoggedIn = (value: boolean) => void;
+const backend = process.env.BACKEND_URL;
 
 export const handleLogin = async (
   event: React.FormEvent<HTMLFormElement>,
@@ -21,7 +22,7 @@ export const handleLogin = async (
   }
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/auth/login", {
+    const response = await fetch(`${backend}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
