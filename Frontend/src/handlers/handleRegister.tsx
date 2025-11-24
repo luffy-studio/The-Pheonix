@@ -1,82 +1,16 @@
-// // handleRegister.tsx
-// import { supabase } from "@/lib/supabase";
-// import bcrypt from "bcryptjs";
-// import { v4 as uuidv4 } from "uuid";
-// import { registrationSchema } from "@/lib/validations/validations";
-
-// type SetIsLoggedIn = (value: boolean) => void;
-
-// export const handleRegister = async (
-//   event: React.FormEvent<HTMLFormElement>,
-//   setIsLoggedIn: SetIsLoggedIn,
-//   router: { push: (path: string) => void }
-// ) => {
-//   event.preventDefault();
-
-//   const formData = new FormData(event.currentTarget);
-//   const username = String(formData.get("username") || "");
-//   const email = String(formData.get("email") || "");
-//   const password = String(formData.get("password") || "");
-
-//   const validation = registrationSchema.safeParse({ username, email, password });
-//   if (!validation.success) {
-//     alert(
-//       validation.error.errors.map((e) => e.message).join("\n")
-//     );
-//     return;
-//   }
-
-//   try {
-//     const { data: existingUser, error: fetchError } = await supabase
-//       .from("users")
-//       .select("id")
-//       .or(`email.eq.${email},username.eq.${username}`);
-
-//     if (fetchError) {
-//       console.error("Error checking user:", fetchError.message);
-//       alert("An error occurred while checking existing users.");
-//       return;
-//     }
-
-//     if (existingUser && existingUser.length > 0) {
-//       alert("User already registered with this email or username.");
-//       return;
-//     }
-
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const userId = uuidv4();
-
-//     const { error: insertError } = await supabase
-//       .from("users")
-//       .insert({
-//         id: userId,
-//         username,
-//         email,
-//         password: hashedPassword,
-//       });
-
-//     if (insertError) {
-//       console.error("Error saving user data:", insertError.message);
-//       alert(`Failed to save user: ${insertError.message}`);
-//       return;
-//     }
-
-//     alert("Registration successful!");
-//     setIsLoggedIn(true);
-//     try { localStorage.setItem("isLoggedIn", "true"); } catch {}
-//     router.push("/");
-//   } catch (err) {
-//     console.error("Unexpected error during registration:", err);
-//     alert("An unexpected error occurred.");
-//   }
-// };
-
-
-
 import { registrationSchema } from "@/lib/validations/validations";
-const backend = process.env.Bckend_url;
 
 type SetIsLoggedIn = (value: boolean) => void;
+
+// 🔹 Backend URL (abhi ke liye hardcoded NGROK)
+// Chahe to baad me env pe shift kar sakta hai.
+const backend =
+  process.env.NEXT_PUBLIC_BACKEND_URL ??
+  "https://nonmeasurably-ethnogenic-kaylin.ngrok-free.dev";
+
+if (!backend) {
+  console.error("❌ Backend URL missing. Set NEXT_PUBLIC_BACKEND_URL env var.");
+}
 
 export const handleRegister = async (
   event: React.FormEvent<HTMLFormElement>,
@@ -85,53 +19,60 @@ export const handleRegister = async (
 ) => {
   event.preventDefault();
 
-  // 🔹 Extract and trim form data
   const formData = new FormData(event.currentTarget);
   const username = String(formData.get("username") || "").trim();
   const email = String(formData.get("email") || "").trim();
-  const password = String(formData.get("password") || "");
+  const password = String(formData.get("password") || "").trim();
 
-  // 🔹 Validate input using Zod schema
+  // ✅ Zod validation
   const validation = registrationSchema.safeParse({ username, email, password });
   if (!validation.success) {
     alert(validation.error.errors.map((e) => e.message).join("\n"));
     return;
   }
 
+  if (!backend) {
+    alert("Backend URL is not configured.");
+    return;
+  }
+
   try {
-    // 🔹 Call FastAPI backend
     const response = await fetch(`${backend}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, email, password }),
     });
 
-    let result: any;
+    let result: any = null;
     try {
       result = await response.json();
-    } catch {
+    } catch (e) {
+      console.error("Server did not return valid JSON:", e);
       alert("Received invalid response from server.");
       return;
     }
 
-    // 🔹 Handle backend errors
     if (!response.ok) {
-      alert(result.detail || "Registration failed. Please try again.");
+      alert(result?.detail || "Registration failed. Please try again.");
       return;
     }
 
-    // 🔹 Registration successful
-    setIsLoggedIn(true);
+    // ✅ Expected backend response
+    const userId = result.userId || result.user_id;
+
     alert("Registration successful!");
+    setIsLoggedIn(true);
 
     try {
       localStorage.setItem("isLoggedIn", "true");
-      localStorage.setItem("userId", result.userId || result.user_id || "");
+      if (userId) {
+        localStorage.setItem("userId", userId);
+      }
     } catch (err) {
       console.warn("Failed to save to localStorage:", err);
     }
 
-    router.push("/"); // 🔹 Redirect after success
+    router.push("/");
   } catch (err) {
     console.error("Unexpected error during registration:", err);
     alert("An unexpected error occurred. Please check your network and try again.");
