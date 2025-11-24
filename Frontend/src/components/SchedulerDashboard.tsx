@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '@/lib/context/AuthContext';
-const backend = process.env.Bckend_url;
+const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 interface ScheduleAnalytics {
   generation_method: string;

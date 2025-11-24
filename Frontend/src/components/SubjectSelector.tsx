@@ -47,7 +47,7 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
     { Subject_Name: "Business Ethics", Subject_Code: "MG301", Subject_Type: "Core", Department: "Management", Credits: 2 }
   ]);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
-
+  const backend = process.env.NEXT_PUBLIC_BACKEND_URL || "";
   const [newSubject, setNewSubject] = useState<Subject>({
     Subject_Name: "",
     Subject_Code: "",
@@ -104,7 +104,7 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
     console.log("📦 Payload to submit:", payload);
 
     try {
-      const response = await fetch("${backend}/upload_subjects", {
+      const response = await fetch(`${backend}/upload_subjects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -206,8 +206,8 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
                     whileTap={{ scale: 0.98 }}
                     onClick={() => toggleDepartment(department)}
                     className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${expandedDepartments.includes(department)
-                        ? "glass-card text-gray-800"
-                        : "glass hover:bg-white/10 text-gray-600"
+                      ? "glass-card text-gray-800"
+                      : "glass hover:bg-white/10 text-gray-600"
                       }`}
                   >
                     <span className="font-medium">{department}</span>

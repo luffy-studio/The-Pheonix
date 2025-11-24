@@ -19,7 +19,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useRouter } from 'next/router';
 
-const backend = process.env.Bckend_url;
+const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 // Improved TypeScript interfaces
 interface Faculty {
@@ -174,7 +174,7 @@ const TimetableGrid: React.FC = () => {
       };
 
       const res = await axios.post(
-        "${backend}/upload_faculty",
+        `${backend}/upload_faculty`,
         payload,
         { headers: { "Content-Type": "application/json" } }
       );
@@ -209,7 +209,7 @@ const TimetableGrid: React.FC = () => {
       };
 
       const res = await axios.post(
-        "${backend}/upload_courses",
+        `${backend}/upload_courses`,
         payload,
         { headers: { "Content-Type": "application/json" } }
       );
@@ -252,7 +252,7 @@ const TimetableGrid: React.FC = () => {
       }
 
       const response = await axios.post(
-        "${backend}/clear_user_data",
+        `${backend}/clear_user_data`,
         { user_id: userId },
         { headers: { "Content-Type": "application/json" } }
       );
@@ -292,7 +292,7 @@ const TimetableGrid: React.FC = () => {
       alert("Generating timetable... This may take a moment.");
 
       const response = await axios.post(
-        "${backend}/generate_timetable",
+        `${backend}/generate_timetable`,
         { user_id: userId },
         { headers: { "Content-Type": "application/json" } }
       );
@@ -496,8 +496,8 @@ const TimetableGrid: React.FC = () => {
             onClick={handleGenerateTimeTable}
             disabled={!isLoggedIn || !courseVerified || !facultyVerified}
             className={`px-8 py-4 rounded-xl font-semibold text-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl ${isLoggedIn && courseVerified && facultyVerified
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-                : 'bg-gray-400 text-gray-700 cursor-not-allowed'
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+              : 'bg-gray-400 text-gray-700 cursor-not-allowed'
               }`}
           >
             Generate Smart Timetable
