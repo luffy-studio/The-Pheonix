@@ -7,7 +7,8 @@ import requests
 import json
 
 # Test configuration
-BASE_URL = "http://localhost:8000"
+# BASE_URL = "http://localhost:8000"
+BASE_URL = "https://the-pheonix-mibx.vercel.app/"
 USER_ID = "088f7a98-e77c-45e0-9a65-859959a2434d"
 
 def test_generator_config():

@@ -19,6 +19,8 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useRouter } from 'next/router';
 
+const backend = process.env.Bckend_url;
+
 // Improved TypeScript interfaces
 interface Faculty {
   Faculty_ID: string;
@@ -172,7 +174,7 @@ const TimetableGrid: React.FC = () => {
       };
 
       const res = await axios.post(
-        "http://localhost:8000/upload_faculty",
+        "${backend}/upload_faculty",
         payload,
         { headers: { "Content-Type": "application/json" } }
       );
@@ -207,7 +209,7 @@ const TimetableGrid: React.FC = () => {
       };
 
       const res = await axios.post(
-        "http://localhost:8000/upload_courses",
+        "${backend}/upload_courses",
         payload,
         { headers: { "Content-Type": "application/json" } }
       );
@@ -250,18 +252,18 @@ const TimetableGrid: React.FC = () => {
       }
 
       const response = await axios.post(
-        "http://localhost:8000/clear_user_data",
+        "${backend}/clear_user_data",
         { user_id: userId },
         { headers: { "Content-Type": "application/json" } }
       );
 
       if (response.data.status === "success") {
-        alert("✅ All data cleared successfully!\n\n" + 
-              "Cleared records:\n" +
-              Object.entries(response.data.cleared_counts)
-                .map(([table, count]) => `• ${table}: ${count} records`)
-                .join("\n"));
-        
+        alert("✅ All data cleared successfully!\n\n" +
+          "Cleared records:\n" +
+          Object.entries(response.data.cleared_counts)
+            .map(([table, count]) => `• ${table}: ${count} records`)
+            .join("\n"));
+
         // Reset local state
         setFacultyData(defaultFacultyData);
         setCourseData(defaultCourseData);
@@ -281,7 +283,7 @@ const TimetableGrid: React.FC = () => {
   const handleGenerateTimeTable = async () => {
     if (!isLoggedIn || !courseVerified || !facultyVerified)
       return alert("Login required or files not verified!");
-    
+
     try {
       const userId = localStorage.getItem("userId");
       if (!userId) return alert("User ID missing. Please log in again!");
@@ -290,7 +292,7 @@ const TimetableGrid: React.FC = () => {
       alert("Generating timetable... This may take a moment.");
 
       const response = await axios.post(
-        "http://localhost:8000/generate_timetable",
+        "${backend}/generate_timetable",
         { user_id: userId },
         { headers: { "Content-Type": "application/json" } }
       );
@@ -392,8 +394,8 @@ const TimetableGrid: React.FC = () => {
           onClick={handleSubmitFaculty}
           disabled={!facultyVerified || !isLoggedIn}
           className={`px-6 py-3 rounded-xl text-white transition ${facultyVerified && isLoggedIn
-              ? 'bg-green-500 hover:bg-green-600'
-              : 'bg-gray-400 cursor-not-allowed'
+            ? 'bg-green-500 hover:bg-green-600'
+            : 'bg-gray-400 cursor-not-allowed'
             }`}
         >
           Submit Faculty
@@ -466,18 +468,18 @@ const TimetableGrid: React.FC = () => {
           onClick={handleSubmitCourses}
           disabled={!courseVerified || !isLoggedIn}
           className={`px-6 py-3 rounded-xl text-white transition ${courseVerified && isLoggedIn
-              ? 'bg-green-500 hover:bg-green-600'
-              : 'bg-gray-400 cursor-not-allowed'
-              }`}
+            ? 'bg-green-500 hover:bg-green-600'
+            : 'bg-gray-400 cursor-not-allowed'
+            }`}
         >
           Submit Courses
         </button>
-        
+
         <div className="mt-6 text-center space-y-4">
           {/* Clear Data Button */}
           {isLoggedIn && (
             <div className="mb-4">
-              <button 
+              <button
                 onClick={handleClearAllData}
                 className="px-6 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors shadow-lg hover:shadow-xl transform hover:scale-105 duration-200"
               >
@@ -488,24 +490,23 @@ const TimetableGrid: React.FC = () => {
               </p>
             </div>
           )}
-          
+
           {/* Generate Timetable Button */}
-          <button 
+          <button
             onClick={handleGenerateTimeTable}
             disabled={!isLoggedIn || !courseVerified || !facultyVerified}
-            className={`px-8 py-4 rounded-xl font-semibold text-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl ${
-              isLoggedIn && courseVerified && facultyVerified
+            className={`px-8 py-4 rounded-xl font-semibold text-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl ${isLoggedIn && courseVerified && facultyVerified
                 ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
                 : 'bg-gray-400 text-gray-700 cursor-not-allowed'
-            }`}
+              }`}
           >
             Generate Smart Timetable
           </button>
-          
+
           {/* Analytics Link */}
           {isLoggedIn && (
             <div className="mt-4">
-              <a 
+              <a
                 href="/analytics"
                 className="inline-flex items-center px-6 py-3 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
               >

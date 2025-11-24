@@ -4,12 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  BarChart3, 
-  Users, 
-  AlertTriangle, 
-  CheckCircle, 
-  RefreshCw, 
+import {
+  BarChart3,
+  Users,
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
   TrendingUp,
   Clock,
   BookOpen,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '@/lib/context/AuthContext';
+const backend = process.env.Bckend_url;
 
 interface ScheduleAnalytics {
   generation_method: string;
@@ -62,19 +63,19 @@ const SchedulerDashboard: React.FC = () => {
       if (!userId) return;
 
       // Load analytics
-      const analyticsResponse = await axios.get(`http://localhost:8000/scheduler/analytics/${userId}`);
+      const analyticsResponse = await axios.get(`${backend}/scheduler/analytics/${userId}`);
       if (analyticsResponse.data.status === 'success') {
         setAnalytics(analyticsResponse.data.data);
       }
 
       // Load teacher workload
-      const workloadResponse = await axios.get(`http://localhost:8000/scheduler/teacher-workload/${userId}`);
+      const workloadResponse = await axios.get(`${backend}/scheduler/teacher-workload/${userId}`);
       if (workloadResponse.data.status === 'success') {
         setTeacherWorkload(workloadResponse.data.data);
       }
 
       // Load conflicts
-      const conflictsResponse = await axios.get(`http://localhost:8000/scheduler/conflicts/${userId}`);
+      const conflictsResponse = await axios.get(`${backend}/scheduler/conflicts/${userId}`);
       if (conflictsResponse.data.status === 'success') {
         setConflicts(conflictsResponse.data.conflicts || []);
       }
@@ -91,7 +92,7 @@ const SchedulerDashboard: React.FC = () => {
       const userId = localStorage.getItem("userId");
       if (!userId) return;
 
-      const response = await axios.post(`http://localhost:8000/scheduler/optimize/${userId}`);
+      const response = await axios.post(`${backend}/scheduler/optimize/${userId}`);
       if (response.data.status === 'success') {
         alert('Schedule optimized successfully! Refreshing analytics...');
         loadAnalytics();
@@ -287,25 +288,25 @@ const SchedulerDashboard: React.FC = () => {
                       <span>Periods per Class</span>
                       <span>{analytics.schedule_stats?.average_periods_per_class || 0}</span>
                     </div>
-                    <Progress 
-                      value={(analytics.schedule_stats?.average_periods_per_class || 0) * 10} 
+                    <Progress
+                      value={(analytics.schedule_stats?.average_periods_per_class || 0) * 10}
                       className="h-2"
                     />
                   </div>
-                  
+
                   <div>
                     <div className="flex justify-between text-sm mb-1">
                       <span>Teacher Utilization</span>
                       <span>
-                        {Object.values(teacherWorkload).length > 0 
+                        {Object.values(teacherWorkload).length > 0
                           ? Math.round(Object.values(teacherWorkload).reduce((acc, teacher) => acc + teacher.utilization_percent, 0) / Object.values(teacherWorkload).length)
                           : 0}%
                       </span>
                     </div>
-                    <Progress 
-                      value={Object.values(teacherWorkload).length > 0 
+                    <Progress
+                      value={Object.values(teacherWorkload).length > 0
                         ? Object.values(teacherWorkload).reduce((acc, teacher) => acc + teacher.utilization_percent, 0) / Object.values(teacherWorkload).length
-                        : 0} 
+                        : 0}
                       className="h-2"
                     />
                   </div>
@@ -332,14 +333,14 @@ const SchedulerDashboard: React.FC = () => {
                       {conflicts.length} issues
                     </Badge>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Schedule Method</span>
                     <Badge variant="outline">
                       {analytics.generation_method === 'smart_scheduler' ? 'Smart' : 'Legacy'}
                     </Badge>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Overall Quality</span>
                     <Badge variant={conflicts.length === 0 ? "default" : "secondary"}>
@@ -383,14 +384,14 @@ const SchedulerDashboard: React.FC = () => {
                         </Badge>
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span>Workload: {workload.current_load}/{workload.max_capacity} hours</span>
                         <span>{workload.utilization_percent}%</span>
                       </div>
-                      <Progress 
-                        value={workload.utilization_percent} 
+                      <Progress
+                        value={workload.utilization_percent}
                         className="h-2"
                       />
                     </div>
@@ -421,21 +422,21 @@ const SchedulerDashboard: React.FC = () => {
                         <div>Resolve {conflicts.length} scheduling conflicts for better efficiency.</div>
                       </Alert>
                     )}
-                    
+
                     {Object.values(teacherWorkload).some(t => t.workload_status === 'overloaded') && (
                       <Alert variant="destructive">
                         <Users className="h-4 w-4" />
                         <div>Some teachers are overloaded. Consider redistributing workload.</div>
                       </Alert>
                     )}
-                    
+
                     {Object.values(teacherWorkload).some(t => t.workload_status === 'underutilized') && (
                       <Alert>
                         <Clock className="h-4 w-4" />
                         <div>Some teachers are underutilized. Consider assigning more classes.</div>
                       </Alert>
                     )}
-                    
+
                     {conflicts.length === 0 && !Object.values(teacherWorkload).some(t => t.workload_status === 'overloaded') && (
                       <Alert>
                         <CheckCircle className="h-4 w-4" />
@@ -462,7 +463,7 @@ const SchedulerDashboard: React.FC = () => {
                         </div>
                       </div>
                     </button>
-                    
+
                     <button
                       onClick={loadAnalytics}
                       disabled={loading}

@@ -104,7 +104,7 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
     console.log("📦 Payload to submit:", payload);
 
     try {
-      const response = await fetch("http://localhost:8000/upload_subjects", {
+      const response = await fetch("${backend}/upload_subjects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -205,11 +205,10 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => toggleDepartment(department)}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${
-                      expandedDepartments.includes(department)
+                    className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 ${expandedDepartments.includes(department)
                         ? "glass-card text-gray-800"
                         : "glass hover:bg-white/10 text-gray-600"
-                    }`}
+                      }`}
                   >
                     <span className="font-medium">{department}</span>
                     {expandedDepartments.includes(department) ? (
@@ -231,40 +230,40 @@ const SubjectSelector: React.FC<SubjectSelectorProps> = ({
                 </h3>
                 <div className="space-y-2">
                   {subjects.map((subject, index) => (
-                  <motion.div
-                    key={`${subject.Subject_Code}-${index}`}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="interactive-card p-4 group"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-gray-800 text-sm leading-tight">
-                          {subject.Subject_Name}
-                        </h4>
-                        <p className="text-xs text-gray-600 mt-1">
-                          {subject.Subject_Code}
-                        </p>
-                        <div className="flex items-center mt-2 text-xs text-gray-500">
-                          <User className="w-3 h-3 mr-1" />
-                          {subject.Department}
+                    <motion.div
+                      key={`${subject.Subject_Code}-${index}`}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="interactive-card p-4 group"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-gray-800 text-sm leading-tight">
+                            {subject.Subject_Name}
+                          </h4>
+                          <p className="text-xs text-gray-600 mt-1">
+                            {subject.Subject_Code}
+                          </p>
+                          <div className="flex items-center mt-2 text-xs text-gray-500">
+                            <User className="w-3 h-3 mr-1" />
+                            {subject.Department}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            Credits: {subject.Credits}
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs text-gray-500">
-                          Credits: {subject.Credits}
-                        </div>
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleRemoveSubject(subject.Subject_Code)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-100 rounded-full"
+                        >
+                          <X className="w-4 h-4 text-red-500" />
+                        </motion.button>
                       </div>
-                      <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleRemoveSubject(subject.Subject_Code)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-100 rounded-full"
-                      >
-                        <X className="w-4 h-4 text-red-500" />
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))}
                 </div>
               </div>
             </div>
