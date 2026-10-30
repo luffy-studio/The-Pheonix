@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Clock
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { useAuth } from '@/lib/context/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -97,7 +96,8 @@ const TimetableGrid: React.FC = () => {
   const [isClearing, setIsClearing] = useState(false);
 
   // Download Templates
-  const handleDownloadFaculty = () => {
+  const handleDownloadFaculty = async () => {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(
       wb,
@@ -107,7 +107,8 @@ const TimetableGrid: React.FC = () => {
     XLSX.writeFile(wb, 'Faculty_Template.xlsx');
   };
 
-  const handleDownloadCourses = () => {
+  const handleDownloadCourses = async () => {
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(
       wb,
@@ -132,8 +133,9 @@ const TimetableGrid: React.FC = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await import('xlsx');
         const data = evt.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
         const wsFaculty = workbook.Sheets['Faculty_Data'];
@@ -189,8 +191,9 @@ const TimetableGrid: React.FC = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await import('xlsx');
         const data = evt.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
         const wsCourse = workbook.Sheets['Course_Data'];
