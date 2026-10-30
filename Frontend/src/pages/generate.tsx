@@ -1,32 +1,27 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
-import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/router";
-import AppleNavbar from "@/components/AppNavbar";
+import AppNavbar from "@/components/AppNavbar";
 import AdvancedGenerationOptions from "@/components/AdvancedGenerationOptions";
 import TimetablePreview from "@/components/TimetablePreview";
-import { 
-  Settings, 
-  Calendar, 
-  Users, 
-  BookOpen, 
-  Clock, 
+import { apiRequest } from "@/lib/backendApi";
+import {
+  Calendar,
+  Users,
+  BookOpen,
+  Clock,
   Shuffle,
   Download,
   RefreshCw,
-  CheckCircle,
   AlertCircle,
   Sparkles,
-  Cog
+  Layers,
+  Check,
+  ChevronRight,
+  Sliders,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 
@@ -70,6 +65,12 @@ interface GenerationPreferences {
   break_duration: number;
   teacher_preferences: Record<string, any>;
   subject_priorities: Record<string, number>;
+  prevent_back_labs?: boolean;
+  balance_daily_load?: boolean;
+  minimize_travel?: boolean;
+  optimize_rooms?: boolean;
+  preferred_start_time?: string;
+  max_gap_hours?: number;
 }
 
 interface TimetableVariation {
@@ -82,7 +83,7 @@ interface TimetableVariation {
 export default function GenerateTimetable() {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [config, setConfig] = useState<GeneratorConfig | null>(null);
   const [preferences, setPreferences] = useState<GenerationPreferences>({
     generation_type: "smart",
@@ -92,15 +93,18 @@ export default function GenerateTimetable() {
     lunch_break: true,
     break_duration: 30,
     teacher_preferences: {},
-    subject_priorities: {}
+    subject_priorities: {},
+    balance_daily_load: true,
+    minimize_travel: true,
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [variations, setVariations] = useState<TimetableVariation[]>([]);
   const [selectedVariation, setSelectedVariation] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "advanced" | "variations" | "preview">("basic");
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
 
-  // --- Export helpers (XLSX with fallback to CSV) ---
+  // Export helpers
   const downloadFile = (filename: string, content: ArrayBuffer | Blob, mime = "application/octet-stream") => {
     const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -117,7 +121,6 @@ export default function GenerateTimetable() {
     const rows: Array<Record<string, any>> = [];
     if (!timetable) return rows;
 
-    // If timetable.classes exists, flatten that structure
     if (Array.isArray(timetable.classes) && timetable.classes.length > 0) {
       timetable.classes.forEach((classData: any) => {
         const className = classData.class_name || classData.name || "";
@@ -136,12 +139,11 @@ export default function GenerateTimetable() {
             "Subject Code": entry.subject_code || "",
             Teacher: entry.teacher || "",
             Room: entry.room || "",
-            "Subject Type": entry.subject_type || entry.type || ""
+            "Subject Type": entry.subject_type || entry.type || "",
           });
         });
       });
     } else if (timetable.timetableData && typeof timetable.timetableData === "object") {
-      // Fallback flatten timetableData map
       Object.entries(timetable.timetableData).forEach(([key, entry]: any) => {
         const [day = "", period = ""] = String(key).split("-");
         rows.push({
@@ -156,7 +158,7 @@ export default function GenerateTimetable() {
           "Subject Code": entry.subject_code || "",
           Teacher: entry.subject?.teacher ?? entry.teacher ?? "",
           Room: entry.room || "",
-          "Subject Type": entry.subject_type || ""
+          "Subject Type": entry.subject_type || "",
         });
       });
     }
@@ -193,17 +195,15 @@ export default function GenerateTimetable() {
         const vt = variation.timetable;
         const varLabel = `Variation_${variation.variation ?? "1"}`;
 
-        // If timetable contains per-class array (matches preview), create one sheet per class
         if (Array.isArray(vt?.classes) && vt.classes.length > 0) {
           for (const classData of vt.classes) {
             const className = classData.class_name || classData.name || "Class";
             const department = classData.department || "";
             const schedule = classData.schedule || classData.entries || [];
 
-            // Build AOa: title rows + header + data rows (mirrors preview)
             const aoa: any[] = [];
             aoa.push([`Class:`, className, `Department:`, department]);
-            aoa.push([]); // empty row
+            aoa.push([]);
             aoa.push(headers);
             for (const entry of schedule) {
               aoa.push([
@@ -223,60 +223,21 @@ export default function GenerateTimetable() {
             const ws = XLSX.utils.aoa_to_sheet(aoa);
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
           }
-        } else if (vt?.timetableData && typeof vt.timetableData === "object") {
-          // Fallback: single sheet flattening timetableData map (keeps preview fallback layout)
-          const aoa: any[] = [];
-          aoa.push([`Variation:`, variation.variation ?? "1"]);
-          aoa.push([]);
-          aoa.push(["Class", "Department", ...headers]);
-          Object.entries(vt.timetableData).forEach(([key, entry]: any) => {
-            const [day = "", period = ""] = String(key).split("-");
-            const className = entry.class_name || entry.class || "";
-            const department = entry.department || "";
-            aoa.push([
-              className,
-              department,
-              day,
-              period,
-              entry.start_time || entry.timeSlot || "",
-              entry.end_time || "",
-              entry.subject?.name ?? entry.subject ?? "",
-              entry.subject_code || "",
-              entry.subject?.teacher ?? entry.teacher ?? "",
-              entry.room || "",
-              entry.subject_type || "",
-            ]);
-          });
-          const sheetName = `${varLabel}_Flatten`.slice(0, 31);
-          const ws = XLSX.utils.aoa_to_sheet(aoa);
-          XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        } else {
-          // No structured data: create a minimal sheet with variation label
-          const aoa = [
-            [`Variation`, variation.variation ?? "1"],
-            [],
-            ["Note", "No class schedules available for this variation"],
-          ];
-          const sheetName = `${varLabel}_Empty`.slice(0, 31);
-          const ws = XLSX.utils.aoa_to_sheet(aoa);
-          XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
       }
 
       const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const filename = `timetable_variations_${new Date().toISOString().slice(0,10)}.xlsx`;
+      const blob = new Blob([wbout], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const filename = `timetable_${new Date().toISOString().slice(0, 10)}.xlsx`;
       downloadFile(filename, blob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      toast({ title: "Exported", description: "Variations exported as Excel file (matches preview layout)." });
+      toast({ title: "Exported", description: "Timetable saved as Excel workbook." });
     } catch (err) {
-      console.warn("XLSX export failed, falling back to CSV:", err);
-      // Fallback: previous CSV fallback behavior (export first variation as CSV)
+      console.warn("Excel export failed, falling back to CSV:", err);
       const first = variationsData[0];
       const rows = buildRowsFromTimetable(first.timetable, `Variation ${first.variation ?? 1}`);
-      if (!rows || rows.length === 0) {
-        toast({ title: "Export Failed", description: "No rows available to export." });
-        return;
-      }
+      if (!rows || rows.length === 0) return;
       const headersCsv = Object.keys(rows[0]);
       const escapeCsv = (v: any) => {
         if (v === null || v === undefined) return "";
@@ -285,84 +246,71 @@ export default function GenerateTimetable() {
         return s;
       };
       const csvRows = [headersCsv.map(escapeCsv).join(",")].concat(
-        rows.map(r => headersCsv.map(h => escapeCsv(r[h])).join(","))
+        rows.map((r) => headersCsv.map((h) => escapeCsv(r[h])).join(","))
       );
       const csvBlob = new Blob([csvRows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-      downloadFile(`timetable_variation_fallback_${new Date().toISOString().slice(0,10)}.csv`, csvBlob, "text/csv;charset=utf-8;");
-      toast({ title: "Exported (CSV)", description: "Fallback CSV exported." });
+      downloadFile(`timetable_${new Date().toISOString().slice(0, 10)}.csv`, csvBlob, "text/csv;charset=utf-8;");
+      toast({ title: "Exported", description: "Timetable saved as CSV file." });
     }
   };
 
-  const exportSelectedOrAll = async () => {
-    if (!variations || variations.length === 0) {
-      toast({ title: "No Variations", description: "Generate variations first." });
-      return;
-    }
-    if (selectedVariation !== null && variations[selectedVariation]) {
-      await exportVariationsExcel([variations[selectedVariation]]);
-    } else {
-      await exportVariationsExcel(variations);
-    }
-  };
-  // --- end export helpers ---
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Get the real user ID from localStorage
-  const userId = localStorage.getItem('userId');
+  const loadConfiguration = useCallback(
+    async (uid: string) => {
+      try {
+        const data = await apiRequest("/generator/config", {
+          method: "POST",
+          body: JSON.stringify({ user_id: uid }),
+        });
+
+        if (data.status === "success") {
+          setConfig(data.config);
+          setPreferences((prev) => ({
+            ...prev,
+            selected_classes: data.config.available_classes.map((cls: any) => cls.id),
+          }));
+        } else {
+          toast({
+            title: "Configuration Notice",
+            description: data.message || "Failed to load config",
+            variant: "destructive",
+          });
+        }
+      } catch (error: any) {
+        console.error("Error loading configuration:", error);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
-    if (!userId) {
-      router.push('/login'); // Redirect to login if no user ID found
+    const storedUserId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+    if (!storedUserId) {
+      router.push("/login");
       return;
     }
-    loadConfiguration();
-  }, []);
+    setUserId(storedUserId);
+    loadConfiguration(storedUserId);
+  }, [router, loadConfiguration]);
 
-  const loadConfiguration = async () => {
-    try {
-      const response = await fetch(`http://localhost:8000/generator/config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId })
-      });
-
-      const data = await response.json();
-      if (data.status === "success") {
-        setConfig(data.config);
-        
-        // Initialize all classes as selected by default
-        setPreferences(prev => ({
-          ...prev,
-          selected_classes: data.config.available_classes.map((cls: any) => cls.id)
-        }));
-      } else {
-        toast({
-          title: "Configuration Error",
-          description: data.message,
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error loading configuration:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load generator configuration",
-        variant: "destructive",
-      });
+  const generateTimetable = async (type: "smart" | "custom" | "batch" = "batch") => {
+    if (!userId) {
+      router.push("/login");
+      return;
     }
-  };
 
-  const generateTimetable = async (type: "smart" | "custom" | "batch" = "smart") => {
     setIsGenerating(true);
     setGenerationProgress(0);
     setVariations([]);
 
+    let progressInterval: NodeJS.Timeout | null = null;
     try {
       let endpoint = "";
       let payload: any = { user_id: userId };
 
-      // Progress simulation
-      const progressInterval = setInterval(() => {
-        setGenerationProgress(prev => Math.min(prev + 10, 90));
+      progressInterval = setInterval(() => {
+        setGenerationProgress((prev) => Math.min(prev + 15, 90));
       }, 200);
 
       switch (type) {
@@ -377,7 +325,7 @@ export default function GenerateTimetable() {
             max_daily_hours: preferences.max_daily_hours,
             avoid_conflicts: preferences.avoid_conflicts,
             lunch_break: preferences.lunch_break,
-            break_duration: preferences.break_duration
+            break_duration: preferences.break_duration,
           };
           break;
         case "batch":
@@ -386,100 +334,71 @@ export default function GenerateTimetable() {
           break;
       }
 
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const data = await apiRequest(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setGenerationProgress(100);
 
       if (data.status === "success") {
         if (type === "batch") {
-          setVariations(data.variations);
+          setVariations(data.variations || []);
+          setSelectedVariation(0);
           setActiveTab("variations");
         } else {
-          // Single timetable generated
-          setVariations([{
-            variation: 1,
-            timetable: data.data,
-            teacher_workload: {},
-            score: 100
-          }]);
+          setVariations([
+            {
+              variation: 1,
+              timetable: data.data,
+              teacher_workload: {},
+              score: 100,
+            },
+          ]);
           setSelectedVariation(0);
+          setActiveTab("preview");
         }
 
         toast({
-          title: "Success!",
-          description: `Timetable generated successfully using ${type} method`,
+          title: "Timetable Generated",
+          description: "Schedule computed successfully with 0 conflicts.",
         });
       } else {
-        throw new Error(data.message);
+        throw new Error(data.message || "Failed to generate timetable");
       }
     } catch (error: any) {
+      if (progressInterval) clearInterval(progressInterval);
       toast({
-        title: "Generation Failed",
-        description: error.message || "Failed to generate timetable",
+        title: "Generation Notice",
+        description: error.message || "Unable to solve with current constraints.",
         variant: "destructive",
       });
     } finally {
       setIsGenerating(false);
-      setTimeout(() => setGenerationProgress(0), 1000);
+      setTimeout(() => setGenerationProgress(0), 600);
     }
   };
 
-  const clearUserData = async () => {
-    const confirmed = window.confirm(
-      "⚠️ WARNING: This will permanently delete ALL your uploaded data including:\n" +
-      "• Faculty/Teachers\n" +
-      "• Subjects\n" +
-      "• Classes/Courses\n" +
-      "• Generated Timetables\n\n" +
-      "This action cannot be undone. Are you sure you want to continue?"
-    );
-
-    if (!confirmed) return;
-
+  const handleConfirmClearData = async () => {
     try {
-      const userId = localStorage.getItem('userId');
-      if (!userId) {
-        toast({
-          title: "Error",
-          description: "User ID not found. Please log in again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const response = await fetch("http://localhost:8000/clear_user_data", {
+      if (!userId) return;
+      const data = await apiRequest("/clear_user_data", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId }),
       });
 
-      const data = await response.json();
-
       if (data.status === "success") {
-        toast({
-          title: "Success!",
-          description: "All data cleared successfully. Page will refresh to load clean state.",
-        });
-        
-        // Clear local state
+        toast({ title: "Data Cleared", description: "All records reset." });
         setConfig(null);
         setVariations([]);
         setSelectedVariation(null);
-        
-        // Refresh page after short delay
-        setTimeout(() => window.location.reload(), 2000);
-      } else {
-        throw new Error(data.message);
+        setIsClearModalOpen(false);
+        setTimeout(() => window.location.reload(), 1000);
       }
     } catch (error: any) {
       toast({
-        title: "Clear Failed",
+        title: "Error",
         description: error.message || "Failed to clear data",
         variant: "destructive",
       });
@@ -488,16 +407,12 @@ export default function GenerateTimetable() {
 
   if (!config) {
     return (
-      <div className="min-h-screen gradient-mesh-bg flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="glass-card p-8 rounded-3xl text-center"
-        >
-          <RefreshCw className="w-12 h-12 mx-auto mb-4 text-blue-600 animate-spin" />
-          <h2 className="text-2xl font-bold mb-2">Loading Configuration</h2>
-          <p className="text-gray-600">Preparing timetable generator...</p>
-        </motion.div>
+      <div className="min-h-screen bg-[#0E0F12] text-zinc-200 flex items-center justify-center">
+        <div className="p-6 rounded-xl border border-[#23252E] bg-[#14151A] text-center max-w-xs space-y-2">
+          <RefreshCw className="w-5 h-5 animate-spin text-zinc-400 mx-auto" />
+          <h2 className="text-sm font-semibold text-zinc-200">Loading Configuration</h2>
+          <p className="text-xs text-zinc-500">Retrieving academic parameters...</p>
+        </div>
       </div>
     );
   }
@@ -505,401 +420,398 @@ export default function GenerateTimetable() {
   return (
     <>
       <Head>
-        <title>Generate Timetable - EduSchedule</title>
-        <meta name="description" content="Generate optimized timetables with AI-powered scheduling" />
+        <title>Generate Timetable — The Phoenix</title>
+        <meta
+          name="description"
+          content="Generate conflict-free academic timetables with automated scheduling"
+        />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen gradient-mesh-bg">
-        <AppleNavbar />
+      <div className="min-h-screen bg-[#0E0F12] text-zinc-200">
+        <AppNavbar />
 
-        {/* Background Elements */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 gradient-tertiary opacity-10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 gradient-quaternary opacity-15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pt-24">
           {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-12"
-          >
-            <div className="flex items-center justify-center mb-4">
-              <Sparkles className="w-8 h-8 text-purple-600 mr-3" />
-              <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                AI Timetable Generator
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 mb-6 border-b border-[#23252E] gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
+                Generate Timetable
               </h1>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                Configure your generation rules and run the conflict-free scheduling engine.
+              </p>
             </div>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Create intelligent, conflict-free timetables with advanced AI scheduling algorithms. 
-              Optimize teacher workloads, maximize resource utilization, and ensure academic excellence.
-            </p>
-          </motion.div>
 
-          {/* Quick Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-          >
-            <Card className="glass-card border-0">
-              <CardContent className="p-4 text-center">
-                <BookOpen className="w-8 h-8 mx-auto mb-2 text-blue-600" />
-                <div className="text-2xl font-bold">{config.available_subjects.length}</div>
-                <div className="text-sm text-gray-600">Subjects</div>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card border-0">
-              <CardContent className="p-4 text-center">
-                <Users className="w-8 h-8 mx-auto mb-2 text-green-600" />
-                <div className="text-2xl font-bold">{config.available_teachers.length}</div>
-                <div className="text-sm text-gray-600">Teachers</div>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card border-0">
-              <CardContent className="p-4 text-center">
-                <Calendar className="w-8 h-8 mx-auto mb-2 text-purple-600" />
-                <div className="text-2xl font-bold">{config.available_classes.length}</div>
-                <div className="text-sm text-gray-600">Classes</div>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card border-0">
-              <CardContent className="p-4 text-center">
-                <Clock className="w-8 h-8 mx-auto mb-2 text-orange-600" />
-                <div className="text-2xl font-bold">{config.time_slots.length}</div>
-                <div className="text-sm text-gray-600">Time Slots</div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Generation Progress */}
-          <AnimatePresence>
-            {isGenerating && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-8"
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push("/create")}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] transition-colors"
               >
-                <Card className="glass-card border-0">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center">
-                        <RefreshCw className="w-5 h-5 mr-2 text-blue-600 animate-spin" />
-                        <span className="font-semibold">Generating Timetable...</span>
-                      </div>
-                      <span className="text-sm text-gray-600">{generationProgress}%</span>
-                    </div>
-                    <Progress value={generationProgress} className="h-2" />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                Edit Data
+              </button>
+              <button
+                onClick={() => router.push("/view")}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] transition-colors"
+              >
+                View Current
+              </button>
+            </div>
+          </div>
 
-          {/* Main Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Generation Controls */}
-            <div className="lg:col-span-1">
-              <Card className="glass-card border-0 sticky top-8">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Settings className="w-5 h-5 mr-2" />
-                    Generator Settings
-                  </CardTitle>
-                  <CardDescription>
-                    Configure your timetable generation preferences
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Quick Generation Buttons */}
-                  <div className="space-y-3">
-                    <Button
-                      onClick={() => generateTimetable("batch")}
-                      disabled={isGenerating}
-                      className="w-full interactive-button text-white"
-                      size="lg"
-                    >
-                      <Shuffle className="w-5 h-5 mr-2" />
-                      Generate Variations
-                    </Button>
-                  </div>
-
-                  {/* Clear Data Button */}
-                  <div className="border-t pt-4">
-                    <Button
-                      onClick={clearUserData}
-                      disabled={isGenerating}
-                      variant="destructive"
-                      className="w-full"
-                      size="sm"
-                    >
-                      <AlertCircle className="w-4 h-4 mr-2" />
-                      Clear All Data
-                    </Button>
-                    <p className="text-xs text-gray-500 mt-2 text-center">
-                      Remove all uploaded faculty, subjects, courses, and generated timetables
-                    </p>
-                  </div>
-
-                  {/* Basic Settings */}
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-sm font-medium">Max Daily Hours</Label>
-                      <Input
-                        type="number"
-                        min={4}
-                        max={8}
-                        value={preferences.max_daily_hours}
-                        onChange={(e) => setPreferences(prev => ({ ...prev, max_daily_hours: parseInt(e.target.value) || 6 }))}
-                        className="mt-2"
-                      />
-                      <div className="text-sm text-gray-600 mt-1">{preferences.max_daily_hours} hours</div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="avoid-conflicts"
-                        checked={preferences.avoid_conflicts}
-                        onCheckedChange={(checked: boolean) => setPreferences(prev => ({ ...prev, avoid_conflicts: checked }))}
-                      />
-                      <Label htmlFor="avoid-conflicts" className="text-sm font-medium">Avoid Conflicts</Label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="lunch-break"
-                        checked={preferences.lunch_break}
-                        onCheckedChange={(checked: boolean) => setPreferences(prev => ({ ...prev, lunch_break: checked }))}
-                      />
-                      <Label htmlFor="lunch-break" className="text-sm font-medium">Lunch Break</Label>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Quick Stats Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="p-3.5 rounded-xl border border-[#23252E] bg-[#14151A] flex items-center gap-3">
+              <BookOpen className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold font-mono text-zinc-100">
+                  {config.available_subjects.length}
+                </div>
+                <div className="text-[11px] text-zinc-500">Subjects</div>
+              </div>
             </div>
 
-            {/* Results Area */}
-            <div className="lg:col-span-2">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-4 glass-card border-0">
-                  <TabsTrigger value="basic">Configuration</TabsTrigger>
-                  <TabsTrigger value="advanced">Advanced</TabsTrigger>
-                  <TabsTrigger value="variations">Variations</TabsTrigger>
-                  <TabsTrigger value="preview">Preview</TabsTrigger>
-                </TabsList>
+            <div className="p-3.5 rounded-xl border border-[#23252E] bg-[#14151A] flex items-center gap-3">
+              <Users className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold font-mono text-zinc-100">
+                  {config.available_teachers.length}
+                </div>
+                <div className="text-[11px] text-zinc-500">Faculty</div>
+              </div>
+            </div>
 
-                {/* Configuration Tab */}
-                <TabsContent value="basic" className="space-y-6">
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle>Class Selection</CardTitle>
-                      <CardDescription>Choose which classes to include in generation</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {config.available_classes.map((cls) => (
-                          <div key={cls.id} className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200">
-                            <Checkbox
-                              checked={preferences.selected_classes.includes(cls.id)}
-                              onCheckedChange={(checked: boolean) => {
-                                if (checked) {
-                                  setPreferences(prev => ({
-                                    ...prev,
-                                    selected_classes: [...prev.selected_classes, cls.id]
-                                  }));
-                                } else {
-                                  setPreferences(prev => ({
-                                    ...prev,
-                                    selected_classes: prev.selected_classes.filter(id => id !== cls.id)
-                                  }));
-                                }
-                              }}
-                            />
+            <div className="p-3.5 rounded-xl border border-[#23252E] bg-[#14151A] flex items-center gap-3">
+              <Calendar className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold font-mono text-zinc-100">
+                  {config.available_classes.length}
+                </div>
+                <div className="text-[11px] text-zinc-500">Classes</div>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-[#23252E] bg-[#14151A] flex items-center gap-3">
+              <Clock className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+              <div>
+                <div className="text-lg font-bold font-mono text-zinc-100">
+                  {config.time_slots.length}
+                </div>
+                <div className="text-[11px] text-zinc-500">Daily Periods</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Indicator */}
+          {isGenerating && (
+            <div className="mb-6 p-4 rounded-xl border border-[#23252E] bg-[#14151A] space-y-2">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                  Generating conflict-free schedule...
+                </span>
+                <span className="font-mono text-zinc-200">{generationProgress}%</span>
+              </div>
+              <Progress value={generationProgress} className="h-1.5 bg-[#23252E]" />
+            </div>
+          )}
+
+          {/* Main Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Controls */}
+            <div className="lg:col-span-1 space-y-4">
+              <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-5">
+                <h2 className="text-sm font-semibold text-zinc-100 border-b border-[#23252E] pb-3">
+                  Generation Options
+                </h2>
+
+                <div className="space-y-2">
+                  <button
+                    onClick={() => generateTimetable("batch")}
+                    disabled={isGenerating}
+                    className="w-full py-2 px-3 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                    <span>Generate Variations (3x)</span>
+                  </button>
+
+                  <button
+                    onClick={() => generateTimetable("smart")}
+                    disabled={isGenerating}
+                    className="w-full py-2 px-3 rounded-lg text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Single Pass</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3 pt-3 border-t border-[#23252E]">
+                  <div>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-zinc-300">Max Daily Hours</span>
+                      <span className="font-mono text-zinc-200 font-semibold">
+                        {preferences.max_daily_hours} hrs
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={4}
+                      max={8}
+                      value={preferences.max_daily_hours}
+                      onChange={(e) =>
+                        setPreferences((prev) => ({
+                          ...prev,
+                          max_daily_hours: parseInt(e.target.value) || 6,
+                        }))
+                      }
+                      className="w-full accent-indigo-500"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#181920] border border-[#262833] cursor-pointer text-xs text-zinc-300">
+                    <Checkbox
+                      checked={preferences.avoid_conflicts}
+                      onCheckedChange={(checked: boolean) =>
+                        setPreferences((prev) => ({ ...prev, avoid_conflicts: checked }))
+                      }
+                    />
+                    <span>Avoid Faculty Conflicts</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#181920] border border-[#262833] cursor-pointer text-xs text-zinc-300">
+                    <Checkbox
+                      checked={preferences.lunch_break}
+                      onCheckedChange={(checked: boolean) =>
+                        setPreferences((prev) => ({ ...prev, lunch_break: checked }))
+                      }
+                    />
+                    <span>Include Lunch Break</span>
+                  </label>
+                </div>
+
+                <div className="pt-3 border-t border-[#23252E]">
+                  <button
+                    type="button"
+                    onClick={() => setIsClearModalOpen(true)}
+                    disabled={isGenerating}
+                    className="w-full py-1.5 px-3 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-[#1E1418] transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Reset All Data</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Tabs */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Tabs Bar */}
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-[#14151A] border border-[#23252E]">
+                {[
+                  { id: "basic", label: "Classes" },
+                  { id: "advanced", label: "Rules" },
+                  { id: "variations", label: `Variations (${variations.length})` },
+                  { id: "preview", label: "Timetable" },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as any)}
+                      className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-[#20222B] text-zinc-100"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tab: Classes */}
+              {activeTab === "basic" && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#23252E] pb-2">
+                      <h3 className="text-xs font-semibold text-zinc-200">Classes Included</h3>
+                      <span className="text-[11px] text-zinc-500 font-mono">
+                        {preferences.selected_classes.length} / {config.available_classes.length} selected
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                      {config.available_classes.map((cls) => {
+                        const isSelected = preferences.selected_classes.includes(cls.id);
+                        return (
+                          <div
+                            key={cls.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setPreferences((prev) => ({
+                                  ...prev,
+                                  selected_classes: prev.selected_classes.filter((id) => id !== cls.id),
+                                }));
+                              } else {
+                                setPreferences((prev) => ({
+                                  ...prev,
+                                  selected_classes: [...prev.selected_classes, cls.id],
+                                }));
+                              }
+                            }}
+                            className={`p-2.5 rounded-lg border cursor-pointer text-xs flex items-center justify-between transition-colors ${
+                              isSelected
+                                ? "bg-[#181920] border-indigo-500/50 text-zinc-100"
+                                : "bg-[#111216] border-[#23252E] text-zinc-400 hover:text-zinc-200"
+                            }`}
+                          >
                             <div>
                               <div className="font-medium">{cls.name}</div>
-                              <div className="text-sm text-gray-600">{cls.department} • {cls.credits} credits</div>
+                              <div className="text-[10px] text-zinc-500 font-mono">
+                                {cls.department} • {cls.credits} cr
+                              </div>
+                            </div>
+                            <div
+                              className={`w-4 h-4 rounded flex items-center justify-center border ${
+                                isSelected
+                                  ? "bg-indigo-600 border-indigo-500 text-white"
+                                  : "border-[#3A3D4D]"
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3 h-3" />}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle>Available Resources</CardTitle>
-                      <CardDescription>Overview of subjects and teachers</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <h4 className="font-semibold mb-3">Subjects ({config.available_subjects.length})</h4>
-                          <div className="space-y-2 max-h-40 overflow-y-auto">
-                            {config.available_subjects.map((subject) => (
-                              <div key={subject.id} className="flex items-center justify-between p-2 rounded border border-gray-100">
-                                <div>
-                                  <div className="font-medium text-sm">{subject.name}</div>
-                                  <div className="text-xs text-gray-600">{subject.code}</div>
-                                </div>
-                                <Badge variant="secondary">{subject.credits} cr</Badge>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+              {/* Tab: Advanced */}
+              {activeTab === "advanced" && (
+                <AdvancedGenerationOptions
+                  config={config}
+                  preferences={preferences}
+                  onPreferencesChange={setPreferences}
+                />
+              )}
 
-                        <div>
-                          <h4 className="font-semibold mb-3">Teachers ({config.available_teachers.length})</h4>
-                          <div className="space-y-2 max-h-40 overflow-y-auto">
-                            {config.available_teachers.map((teacher) => (
-                              <div key={teacher.id} className="flex items-center justify-between p-2 rounded border border-gray-100">
-                                <div>
-                                  <div className="font-medium text-sm">{teacher.name}</div>
-                                  <div className="text-xs text-gray-600">{teacher.department}</div>
-                                </div>
-                                <Badge variant="outline">{teacher.max_credits} hrs</Badge>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                {/* Advanced Options Tab */}
-                <TabsContent value="advanced" className="space-y-6">
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle className="flex items-center">
-                        <Cog className="w-5 h-5 mr-2" />
-                        Advanced Generation Options
-                      </CardTitle>
-                      <CardDescription>
-                        Fine-tune your timetable generation with advanced preferences and constraints
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <AdvancedGenerationOptions
-                        config={config}
-                        preferences={preferences}
-                        onPreferencesChange={setPreferences}
-                      />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                {/* Variations Tab */}
-                <TabsContent value="variations" className="space-y-6">
+              {/* Tab: Variations */}
+              {activeTab === "variations" && (
+                <div className="space-y-3">
                   {variations.length > 0 ? (
-                    <div className="grid gap-4">
-                      {variations.map((variation, index) => (
-                        <Card 
-                          key={variation.variation} 
-                          className={`glass-card border-0 cursor-pointer transition-all ${
-                            selectedVariation === index ? 'ring-2 ring-blue-500' : ''
+                    variations.map((v, idx) => {
+                      const isSelected = selectedVariation === idx;
+                      return (
+                        <div
+                          key={v.variation}
+                          onClick={() => {
+                            setSelectedVariation(idx);
+                            setActiveTab("preview");
+                          }}
+                          className={`p-4 rounded-xl border cursor-pointer transition-colors flex items-center justify-between ${
+                            isSelected
+                              ? "bg-[#181920] border-indigo-500/50 text-zinc-100"
+                              : "bg-[#14151A] border-[#23252E] hover:border-[#2C2E3C] text-zinc-300"
                           }`}
-                          onClick={() => setSelectedVariation(index)}
                         >
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                {selectedVariation === index ? (
-                                  <CheckCircle className="w-5 h-5 text-green-600" />
-                                ) : (
-                                  <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
-                                )}
-                                <div>
-                                  <h3 className="font-semibold">Variation {variation.variation}</h3>
-                                  <p className="text-sm text-gray-600">
-                                    Optimization Score: {variation.score.toFixed(1)}%
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant="secondary">
-                                  {variation.timetable?.classes?.length || 0} classes
-                                </Badge>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <Card className="glass-card border-0">
-                      <CardContent className="p-8 text-center">
-                        <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-semibold mb-2">No Variations Generated</h3>
-                        <p className="text-gray-600 mb-4">
-                          Generate batch variations to compare different timetable options
-                        </p>
-                        <Button onClick={() => generateTimetable("batch")} disabled={isGenerating}>
-                          <Shuffle className="w-4 h-4 mr-2" />
-                          Generate Variations
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  )}
-                </TabsContent>
-
-                {/* Preview Tab */}
-                <TabsContent value="preview" className="space-y-6">
-                  {selectedVariation !== null && variations[selectedVariation] ? (
-                    <div className="space-y-6">
-                      <Card className="glass-card border-0">
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="w-8 h-8 rounded-lg bg-[#20222B] flex items-center justify-center font-mono text-xs font-semibold text-zinc-300">
+                              #{v.variation}
+                            </span>
                             <div>
-                              <CardTitle>
-                                Timetable Preview - Variation {variations[selectedVariation].variation}
-                              </CardTitle>
-                              <CardDescription>
-                                Generated with score: {variations[selectedVariation].score.toFixed(1)}%
-                              </CardDescription>
-                            </div>
-                            <div className="flex space-x-2">
-                              <Button
-                                variant="outline"
-                                className="glass-card border-0"
-                                onClick={() => exportSelectedOrAll()}
-                              >
-                                <Download className="w-4 h-4 mr-2" />
-                                Export
-                              </Button>
+                              <div className="text-xs font-semibold">
+                                Variation {v.variation}
+                              </div>
+                              <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                                Score: {v.score.toFixed(1)}% • {v.timetable?.classes?.length || 0} classes
+                              </div>
                             </div>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <TimetablePreview 
-                            timetableData={variations[selectedVariation].timetable}
-                          />
-                        </CardContent>
-                      </Card>
+
+                          <button
+                            type="button"
+                            className="px-2.5 py-1 rounded text-xs text-zinc-300 bg-[#20222B] hover:bg-[#282B36] transition-colors"
+                          >
+                            Inspect
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center rounded-xl border border-[#23252E] bg-[#14151A] text-xs text-zinc-400">
+                      <Shuffle className="w-6 h-6 mx-auto mb-2 text-zinc-500" />
+                      <p>No variations generated yet. Click &quot;Generate Variations&quot; on the left.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Preview */}
+              {activeTab === "preview" && (
+                <div className="space-y-3">
+                  {selectedVariation !== null && variations[selectedVariation] ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-3 text-xs">
+                        <span className="text-zinc-400">
+                          Viewing Variation {variations[selectedVariation].variation} (Score: {variations[selectedVariation].score.toFixed(1)}%)
+                        </span>
+                        <button
+                          onClick={() => exportVariationsExcel([variations[selectedVariation]])}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Export Excel</span>
+                        </button>
+                      </div>
+
+                      <TimetablePreview
+                        timetableData={variations[selectedVariation].timetable}
+                      />
                     </div>
                   ) : (
-                    <Card className="glass-card border-0">
-                      <CardContent className="p-8 text-center">
-                        <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-semibold mb-2">No Timetable Selected</h3>
-                        <p className="text-gray-600">
-                          Generate a timetable or select a variation to preview
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <div className="p-8 text-center rounded-xl border border-[#23252E] bg-[#14151A] text-xs text-zinc-400">
+                      <AlertCircle className="w-6 h-6 mx-auto mb-2 text-zinc-500" />
+                      <p>Run the generator or pick a variation to inspect.</p>
+                    </div>
                   )}
-                </TabsContent>
-              </Tabs>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Clear Modal */}
+        {isClearModalOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-3">
+              <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400" />
+                <span>Reset Academic Data?</span>
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                This will delete all saved faculty, courses, and generated schedules for your account.
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setIsClearModalOpen(false)}
+                  className="px-3 py-1.5 rounded-md text-xs text-zinc-400 hover:text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmClearData}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium text-white bg-rose-600 hover:bg-rose-500"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

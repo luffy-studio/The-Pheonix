@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BookOpen, CheckCircle, Upload, Trash2, AlertCircle, BarChart3, Download } from 'lucide-react';
+import { 
+  CheckCircle2, 
+  Upload, 
+  Trash2, 
+  AlertCircle, 
+  Download, 
+  ArrowRight, 
+  Users, 
+  GraduationCap, 
+  RefreshCw,
+  Clock
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { useAuth } from '@/lib/context/AuthContext';
@@ -14,14 +22,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
-import { useRouter } from 'next/router';
+import { getBackendUrl, getAuthHeaders } from '@/lib/backendApi';
 
-const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-// Improved TypeScript interfaces
 interface Faculty {
   Faculty_ID: string;
   Name: string;
@@ -40,39 +43,59 @@ interface Course {
   Course_Type: 'Theory' | 'Lab' | 'Project';
 }
 
-// Default template data with improved structure
 const defaultFacultyData: Faculty[] = [
   {
     Faculty_ID: 'F001',
-    Name: 'Dr. Anjali Sharma',
-    Department: 'ECE',
+    Name: 'Dr. Alan Turing',
+    Department: 'CSE',
     Course_Type: 'Theory',
-    Max_Credits: 10,
-    primary_subject: 'Digital Electronics',
-    other_subject: 'Circuit Theory',
+    Max_Credits: 18,
+    primary_subject: 'Data Structures',
+    other_subject: 'Algorithms',
+  },
+  {
+    Faculty_ID: 'F002',
+    Name: 'Prof. Ada Lovelace',
+    Department: 'CSE',
+    Course_Type: 'Lab',
+    Max_Credits: 16,
+    primary_subject: 'Operating Systems',
+    other_subject: 'Computer Architecture',
   },
 ];
 
 const defaultCourseData: Course[] = [
   {
-    Course_Code: 'ECE201',
-    Course_Name: 'Digital Electronics',
-    department: 'ECE',
+    Course_Code: 'CS201',
+    Course_Name: 'Data Structures & Algorithms',
+    department: 'CSE',
     Credits: 4,
     Course_Type: 'Theory',
+  },
+  {
+    Course_Code: 'CS301',
+    Course_Name: 'Operating Systems Lab',
+    department: 'CSE',
+    Credits: 3,
+    Course_Type: 'Lab',
   },
 ];
 
 const TimetableGrid: React.FC = () => {
   const { isLoggedIn } = useAuth();
+  const { toast } = useToast();
 
   const [facultyData, setFacultyData] = useState<Faculty[]>(defaultFacultyData);
   const [courseData, setCourseData] = useState<Course[]>(defaultCourseData);
 
   const [facultyVerified, setFacultyVerified] = useState(false);
   const [courseVerified, setCourseVerified] = useState(false);
-  const [isButton1Active, setIsButton1Active] = useState(false);
-  const [isButton2Active, setIsButton2Active] = useState(false);
+  const [isSubmittingFaculty, setIsSubmittingFaculty] = useState(false);
+  const [isSubmittingCourses, setIsSubmittingCourses] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
   // Download Templates
   const handleDownloadFaculty = () => {
     const wb = XLSX.utils.book_new();
@@ -97,7 +120,11 @@ const TimetableGrid: React.FC = () => {
   // Upload Faculty File
   const handleUploadFaculty = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isLoggedIn) {
-      alert('You must be logged in to upload a file!');
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to upload faculty data.",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -106,26 +133,55 @@ const TimetableGrid: React.FC = () => {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const data = evt.target?.result;
-      const workbook = XLSX.read(data, { type: 'array' });
-      const wsFaculty = workbook.Sheets['Faculty_Data'];
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const wsFaculty = workbook.Sheets['Faculty_Data'];
 
-      if (!wsFaculty) {
-        alert('Excel must contain "Faculty_Data" sheet!');
-        setFacultyVerified(false);
-        return;
+        if (!wsFaculty) {
+          toast({
+            title: "Invalid Sheet Format",
+            description: 'Excel file must contain a "Faculty_Data" sheet.',
+            variant: "destructive"
+          });
+          setFacultyVerified(false);
+          return;
+        }
+
+        const facultyJson = XLSX.utils.sheet_to_json<Faculty>(wsFaculty);
+        if (facultyJson.length === 0) {
+          toast({
+            title: "Empty Sheet",
+            description: "No faculty records found in file.",
+            variant: "destructive"
+          });
+          return;
+        }
+        setFacultyData(facultyJson);
+        setFacultyVerified(true);
+        toast({
+          title: "Faculty Loaded",
+          description: `Loaded ${facultyJson.length} faculty entries. Click "Save" to persist.`,
+        });
+      } catch (err: any) {
+        toast({
+          title: "File Parse Error",
+          description: err.message || "Failed to parse Excel file",
+          variant: "destructive"
+        });
       }
-
-      const facultyJson = XLSX.utils.sheet_to_json<Faculty>(wsFaculty);
-      setFacultyData(facultyJson);
-      setFacultyVerified(true);
     };
     reader.readAsArrayBuffer(file);
   };
+
   // Upload Courses File
   const handleUploadCourses = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isLoggedIn) {
-      alert('You must be logged in to upload a file!');
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to upload course data.",
+        variant: "destructive"
+      });
       return;
     }
 
@@ -134,244 +190,294 @@ const TimetableGrid: React.FC = () => {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const data = evt.target?.result;
-      const workbook = XLSX.read(data, { type: 'array' });
-      const wsCourse = workbook.Sheets['Course_Data'];
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const wsCourse = workbook.Sheets['Course_Data'];
 
-      if (!wsCourse) {
-        alert('Excel must contain "Course_Data" sheet!');
-        setCourseVerified(false);
-        return;
+        if (!wsCourse) {
+          toast({
+            title: "Invalid Sheet Format",
+            description: 'Excel file must contain a "Course_Data" sheet.',
+            variant: "destructive"
+          });
+          setCourseVerified(false);
+          return;
+        }
+
+        const courseJson = XLSX.utils.sheet_to_json<Course>(wsCourse);
+        if (courseJson.length === 0) {
+          toast({
+            title: "Empty Sheet",
+            description: "No course records found in file.",
+            variant: "destructive"
+          });
+          return;
+        }
+        setCourseData(courseJson);
+        setCourseVerified(true);
+        toast({
+          title: "Courses Loaded",
+          description: `Loaded ${courseJson.length} courses. Click "Save" to persist.`,
+        });
+      } catch (err: any) {
+        toast({
+          title: "File Parse Error",
+          description: err.message || "Failed to parse Excel file",
+          variant: "destructive"
+        });
       }
-
-      const courseJson = XLSX.utils.sheet_to_json<Course>(wsCourse);
-      setCourseData(courseJson);
-      setCourseVerified(true);
     };
     reader.readAsArrayBuffer(file);
   };
+
   // Submit to backend
   const handleSubmitFaculty = async () => {
-    if (!isLoggedIn) return alert("Login required!");
-    if (!facultyVerified) return alert("Upload and verify first!");
-
-    try {
-      const userId = localStorage.getItem("userId"); // get logged-in user's ID
-      if (!userId) return alert("User ID missing. Please log in again!");
-
-      // Correct payload format
-      const payload = {
-        user_id: userId,
-        details: facultyData.map((f) => ({
-          Teacher_id: f.Faculty_ID || undefined, // optional, auto-generated backend
-          name: f.Name,
-          department: f.Department,
-          course_type: f.Course_Type,
-          max_credits: f.Max_Credits,
-          primary_subject: f.primary_subject,
-          other_subject: f.other_subject,
-        })),
-      };
-
-      const res = await axios.post(
-        `${backend}/upload_faculty`,
-        payload,
-        { headers: { "Content-Type": "application/json" } }
-      );
-
-      alert("Faculty data submitted successfully!");
-      setIsButton1Active(true);
-      console.log(res);
-      console.log(payload)
-    } catch (err: any) {
-      console.error("Faculty submit error:", err.response?.data || err.message);
-      alert(`Error submitting faculty data: ${JSON.stringify(err.response?.data)}`);
-    }
-  };
-  const handleSubmitCourses = async () => {
-    if (!isLoggedIn || !courseVerified)
-      return alert("Login required or file not verified!");
-
-    try {
-      const userId = localStorage.getItem("userId");
-      if (!userId) return alert("User ID missing. Please log in again!");
-
-      // Wrap courses in a single payload object
-      const payload = {
-        user_id: userId,
-        details: courseData.map((c) => ({
-          Course_Code: c.Course_Code,
-          Course_Name: c.Course_Name,
-          department: c.department,
-          Credits: c.Credits,
-          Course_Type: c.Course_Type,
-        })),
-      };
-
-      const res = await axios.post(
-        `${backend}/upload_courses`,
-        payload,
-        { headers: { "Content-Type": "application/json" } }
-      );
-
-      alert("Course data submitted successfully!");
-      setIsButton2Active(true);
-      console.log(res.data);
-    } catch (err: any) {
-      console.error(err);
-      alert(
-        "Error submitting course data: " +
-        (err.response?.data?.detail || err.message)
-      );
-    }
-  };
-
-  // Clear all user data
-  const handleClearAllData = async () => {
     if (!isLoggedIn) {
-      alert("You must be logged in to clear data!");
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
+    if (!facultyVerified) {
+      toast({ title: "Verification required", description: "Upload or verify faculty file first.", variant: "destructive" });
       return;
     }
 
-    const confirmed = window.confirm(
-      "⚠️ WARNING: This will permanently delete ALL your uploaded data including:\n" +
-      "• Faculty/Teachers\n" +
-      "• Subjects\n" +
-      "• Classes/Courses\n" +
-      "• Generated Timetables\n\n" +
-      "This action cannot be undone. Are you sure you want to continue?"
-    );
-
-    if (!confirmed) return;
-
+    setIsSubmittingFaculty(true);
     try {
       const userId = localStorage.getItem("userId");
-      if (!userId) {
-        alert("User ID missing. Please log in again!");
-        return;
-      }
+      if (!userId) throw new Error("User session expired. Please sign in again.");
 
+      const payload = {
+        user_id: userId,
+        details: facultyData.map((f) => ({
+          Teacher_id: f.Faculty_ID || undefined,
+          name: f.Name,
+          department: f.Department,
+          course_type: f.Course_Type,
+          max_credits: Number(f.Max_Credits),
+          primary_subject: f.primary_subject,
+          other_subject: f.other_subject || "",
+        })),
+      };
+
+      const backend = getBackendUrl();
+      const response = await axios.post(
+        `${backend}/upload_teachers`,
+        payload,
+        { headers: getAuthHeaders() }
+      );
+
+      if (response.data.status === 'success') {
+        toast({
+          title: "Faculty Saved",
+          description: `Successfully saved ${payload.details.length} faculty records.`,
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to save faculty");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err.response?.data?.detail || err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingFaculty(false);
+    }
+  };
+
+  const handleSubmitCourses = async () => {
+    if (!isLoggedIn) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
+    if (!courseVerified) {
+      toast({ title: "Verification required", description: "Upload or verify courses file first.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingCourses(true);
+    try {
+      const userId = localStorage.getItem("userId");
+      if (!userId) throw new Error("User session expired. Please sign in again.");
+
+      const payload = {
+        user_id: userId,
+        details: courseData.map((c) => ({
+          Class_ID: c.Course_Code,
+          name: c.Course_Name,
+          department: c.department,
+          credits: Number(c.Credits),
+          course_type: c.Course_Type,
+        })),
+      };
+
+      const backend = getBackendUrl();
+      const response = await axios.post(
+        `${backend}/upload_classes`,
+        payload,
+        { headers: getAuthHeaders() }
+      );
+
+      if (response.data.status === 'success') {
+        toast({
+          title: "Courses Saved",
+          description: `Successfully saved ${payload.details.length} course records.`,
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to save courses");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err.response?.data?.detail || err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingCourses(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    try {
+      setIsClearing(true);
+      const userId = localStorage.getItem("userId");
+      if (!userId) throw new Error("User not found");
+
+      const backend = getBackendUrl();
       const response = await axios.post(
         `${backend}/clear_user_data`,
         { user_id: userId },
-        { headers: { "Content-Type": "application/json" } }
+        { headers: getAuthHeaders() }
       );
 
-      if (response.data.status === "success") {
-        alert("✅ All data cleared successfully!\n\n" +
-          "Cleared records:\n" +
-          Object.entries(response.data.cleared_counts)
-            .map(([table, count]) => `• ${table}: ${count} records`)
-            .join("\n"));
-
-        // Reset local state
-        setFacultyData(defaultFacultyData);
-        setCourseData(defaultCourseData);
+      if (response.data.status === 'success') {
+        toast({
+          title: "Data Reset",
+          description: "All academic records have been cleared.",
+        });
+        setFacultyData([]);
+        setCourseData([]);
         setFacultyVerified(false);
         setCourseVerified(false);
-        setIsButton1Active(false);
-        setIsButton2Active(false);
-      } else {
-        alert("Error clearing data: " + response.data.message);
+        setIsClearModalOpen(false);
       }
     } catch (err: any) {
-      console.error("Clear data error:", err.response?.data || err.message);
-      alert(`Error clearing data: ${err.response?.data?.detail || err.message}`);
+      toast({
+        title: "Clear Failed",
+        description: err.response?.data?.detail || err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsClearing(false);
     }
   };
 
   const handleGenerateTimeTable = async () => {
-    if (!isLoggedIn || !courseVerified || !facultyVerified)
-      return alert("Login required or files not verified!");
+    if (!isLoggedIn) {
+      toast({ title: "Sign in required", variant: "destructive" });
+      return;
+    }
 
+    setIsGenerating(true);
     try {
       const userId = localStorage.getItem("userId");
-      if (!userId) return alert("User ID missing. Please log in again!");
+      if (!userId) throw new Error("User not found");
 
-      // Show loading state
-      alert("Generating timetable... This may take a moment.");
-
+      const backend = getBackendUrl();
       const response = await axios.post(
         `${backend}/generate_timetable`,
         { user_id: userId },
-        { headers: { "Content-Type": "application/json" } }
+        { headers: getAuthHeaders() }
       );
 
       if (response.data.status === "success") {
-        alert("Timetable generated successfully! Redirecting to view page...");
-        // Redirect to view page
+        toast({
+          title: "Timetable Generated",
+          description: "Schedule created successfully. Redirecting...",
+        });
         window.location.href = "/view";
       } else {
-        alert("Error generating timetable: " + response.data.message);
+        throw new Error(response.data.message || "Failed to generate timetable");
       }
     } catch (error: any) {
-      console.error("Error generating timetable:", error);
-      alert("Error generating timetable: " + (error.response?.data?.detail || error.message));
+      toast({
+        title: "Generation Notice",
+        description: error.response?.data?.detail || error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
     }
-  }
+  };
+
   return (
+    <div className="space-y-6">
+      {/* Setup Step Progress */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="p-3.5 rounded-lg border border-[#23252E] bg-[#14151A] flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-medium text-zinc-500">Step 1</div>
+            <div className="text-xs font-semibold text-zinc-200 mt-0.5">Faculty Roster</div>
+            <div className="text-[11px] text-zinc-500">{facultyData.length} records</div>
+          </div>
+          {facultyVerified ? (
+            <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+            </span>
+          ) : (
+            <span className="text-[11px] text-zinc-500">Unsaved</span>
+          )}
+        </div>
 
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="p-3.5 rounded-lg border border-[#23252E] bg-[#14151A] flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-medium text-zinc-500">Step 2</div>
+            <div className="text-xs font-semibold text-zinc-200 mt-0.5">Course Catalog</div>
+            <div className="text-[11px] text-zinc-500">{courseData.length} courses</div>
+          </div>
+          {courseVerified ? (
+            <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+            </span>
+          ) : (
+            <span className="text-[11px] text-zinc-500">Unsaved</span>
+          )}
+        </div>
 
-      {/* Download Templates */}
-      <div className="text-center space-x-4">
-        <button
-          onClick={handleDownloadFaculty}
-          className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 transition"
-        >
-          Download Faculty Template
-        </button>
-        <button
-          onClick={handleDownloadCourses}
-          className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 transition"
-        >
-          Download Courses Template
-        </button>
-      </div>
-
-      {/* Faculty Preview */}
-      <div className="glass-card p-6 rounded-3xl shadow-lg">
-        <h2 className="text-xl font-bold mb-4 flex items-center">
-          <BookOpen className="w-5 h-5 mr-2" /> Faculty Data Preview
-        </h2>
-        <div
-          className="overflow-x-auto border"
-          style={{
-            maxHeight: facultyData.length > 5 ? '300px' : 'auto', // scroll if more than 5 rows
-            overflowY: facultyData.length > 5 ? 'auto' : 'visible',
-          }}
-        >
-          <table className="min-w-full text-sm text-left">
-            <thead>
-              <tr className="bg-gray-100">
-                {Object.keys(defaultFacultyData[0]).map((col) => (
-                  <th key={col} className="px-3 py-2 border">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {facultyData.map((row, idx) => (
-                <tr key={idx}>
-                  {Object.values(row).map((val, i) => (
-                    <td key={i} className="px-3 py-2 border">
-                      {val}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="p-3.5 rounded-lg border border-[#23252E] bg-[#14151A] flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-medium text-zinc-500">Step 3</div>
+            <div className="text-xs font-semibold text-zinc-200 mt-0.5">Run Generator</div>
+            <div className="text-[11px] text-zinc-500">Ready</div>
+          </div>
+          <span className="text-[11px] text-indigo-400 font-medium">Solver Ready</span>
         </div>
       </div>
 
-      {/* Upload + Submit Faculty */}
-      <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
-        <div className="flex items-center space-x-3">
-          {isLoggedIn ? (
-            <label className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 cursor-pointer transition">
-              Upload Faculty File
+      {/* Faculty Card */}
+      <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#23252E]">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <Users className="w-4 h-4 text-zinc-400" />
+              <span>Faculty List</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Teaching credit ceilings and subject assignments</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadFaculty}
+              className="px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] flex items-center gap-1.5 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Template</span>
+            </button>
+
+            <label className="px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] flex items-center gap-1.5 cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Upload Excel</span>
               <input
                 type="file"
                 accept=".xlsx, .xls"
@@ -379,60 +485,45 @@ const TimetableGrid: React.FC = () => {
                 className="hidden"
               />
             </label>
-          ) : (
-            <Alert
-              onClick={() => alert('Please log in to upload!')}
-              className="cursor-pointer px-6 py-3"
+
+            <button
+              onClick={handleSubmitFaculty}
+              disabled={!facultyVerified || isSubmittingFaculty}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                facultyVerified
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-[#181920] text-zinc-500 border border-[#262833] cursor-not-allowed'
+              }`}
             >
-              Please log in to upload a file!
-            </Alert>
-          )}
-          {facultyVerified && <CheckCircle className="w-6 h-6 text-green-500" />}
+              {isSubmittingFaculty ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={handleSubmitFaculty}
-          disabled={!facultyVerified || !isLoggedIn}
-          className={`px-6 py-3 rounded-xl text-white transition ${facultyVerified && isLoggedIn
-            ? 'bg-green-500 hover:bg-green-600'
-            : 'bg-gray-400 cursor-not-allowed'
-            }`}
-        >
-          Submit Faculty
-        </button>
-      </div>
-
-
-      {/* Course Preview */}
-      <div className="glass-card p-6 rounded-3xl shadow-lg">
-        <h2 className="text-xl font-bold mb-4 flex items-center">
-          <BookOpen className="w-5 h-5 mr-2" /> Course Data Preview
-        </h2>
-        <div
-          className={`overflow-x-auto border`}
-          style={{
-            maxHeight: courseData.length > 5 ? '300px' : 'auto', // scroll if more than 5 rows
-            overflowY: courseData.length > 5 ? 'auto' : 'visible',
-          }}
-        >
-          <table className="min-w-full text-sm text-left">
-            <thead>
-              <tr className="bg-gray-100">
-                {Object.keys(defaultCourseData[0]).map((col) => (
-                  <th key={col} className="px-3 py-2 border">
-                    {col}
-                  </th>
-                ))}
+        {/* Faculty Preview Table */}
+        <div className="overflow-x-auto rounded-lg border border-[#23252E] bg-[#111216]">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-[#181920] text-zinc-400 border-b border-[#23252E]">
+              <tr>
+                <th className="px-3 py-2 font-medium">ID</th>
+                <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Dept</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+                <th className="px-3 py-2 font-medium">Max Credits</th>
+                <th className="px-3 py-2 font-medium">Primary Subject</th>
+                <th className="px-3 py-2 font-medium">Other Subject</th>
               </tr>
             </thead>
-            <tbody>
-              {courseData.map((row, idx) => (
-                <tr key={idx}>
-                  {Object.values(row).map((val, i) => (
-                    <td key={i} className="px-3 py-2 border">
-                      {val}
-                    </td>
-                  ))}
+            <tbody className="divide-y divide-[#23252E]">
+              {facultyData.map((f, i) => (
+                <tr key={i} className="hover:bg-[#16171E] transition-colors">
+                  <td className="px-3 py-2 font-mono text-zinc-500">{f.Faculty_ID || `F00${i+1}`}</td>
+                  <td className="px-3 py-2 font-medium text-zinc-200">{f.Name}</td>
+                  <td className="px-3 py-2 text-zinc-400">{f.Department}</td>
+                  <td className="px-3 py-2 text-zinc-400">{f.Course_Type}</td>
+                  <td className="px-3 py-2 font-mono text-zinc-300">{f.Max_Credits} hrs</td>
+                  <td className="px-3 py-2 text-zinc-300">{f.primary_subject}</td>
+                  <td className="px-3 py-2 text-zinc-500">{f.other_subject || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -440,12 +531,29 @@ const TimetableGrid: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload + Submit Courses */}
-      <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
-        <div className="flex items-center space-x-3">
-          {isLoggedIn ? (
-            <label className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 cursor-pointer transition">
-              Upload Courses File
+      {/* Courses Card */}
+      <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#23252E]">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-zinc-400" />
+              <span>Course Catalog</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Classes, departments, and credit structures</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadCourses}
+              className="px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] flex items-center gap-1.5 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Template</span>
+            </button>
+
+            <label className="px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] flex items-center gap-1.5 cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Upload Excel</span>
               <input
                 type="file"
                 accept=".xlsx, .xls"
@@ -453,74 +561,113 @@ const TimetableGrid: React.FC = () => {
                 className="hidden"
               />
             </label>
-          ) : (
-            <Alert
-              onClick={() => alert('Please log in to upload!')}
-              className="cursor-pointer px-6 py-3"
+
+            <button
+              onClick={handleSubmitCourses}
+              disabled={!courseVerified || isSubmittingCourses}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                courseVerified
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-[#181920] text-zinc-500 border border-[#262833] cursor-not-allowed'
+              }`}
             >
-              Please log in to upload a file!
-            </Alert>
-          )}
-          {courseVerified && <CheckCircle className="w-6 h-6 text-green-500" />}
+              {isSubmittingCourses ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={handleSubmitCourses}
-          disabled={!courseVerified || !isLoggedIn}
-          className={`px-6 py-3 rounded-xl text-white transition ${courseVerified && isLoggedIn
-            ? 'bg-green-500 hover:bg-green-600'
-            : 'bg-gray-400 cursor-not-allowed'
-            }`}
-        >
-          Submit Courses
-        </button>
-
-        <div className="mt-6 text-center space-y-4">
-          {/* Clear Data Button */}
-          {isLoggedIn && (
-            <div className="mb-4">
-              <button
-                onClick={handleClearAllData}
-                className="px-6 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors shadow-lg hover:shadow-xl transform hover:scale-105 duration-200"
-              >
-                🗑️ Clear All Data
-              </button>
-              <p className="text-sm text-gray-500 mt-2">
-                Remove all uploaded faculty, subjects, courses, and generated timetables
-              </p>
-            </div>
-          )}
-
-          {/* Generate Timetable Button */}
-          <button
-            onClick={handleGenerateTimeTable}
-            disabled={!isLoggedIn || !courseVerified || !facultyVerified}
-            className={`px-8 py-4 rounded-xl font-semibold text-lg transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl ${isLoggedIn && courseVerified && facultyVerified
-              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
-              : 'bg-gray-400 text-gray-700 cursor-not-allowed'
-              }`}
-          >
-            Generate Smart Timetable
-          </button>
-
-          {/* Analytics Link */}
-          {isLoggedIn && (
-            <div className="mt-4">
-              <a
-                href="/analytics"
-                className="inline-flex items-center px-6 py-3 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                View Scheduler Analytics
-              </a>
-            </div>
-          )}
+        {/* Course Preview Table */}
+        <div className="overflow-x-auto rounded-lg border border-[#23252E] bg-[#111216]">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-[#181920] text-zinc-400 border-b border-[#23252E]">
+              <tr>
+                <th className="px-3 py-2 font-medium">Code</th>
+                <th className="px-3 py-2 font-medium">Course Name</th>
+                <th className="px-3 py-2 font-medium">Department</th>
+                <th className="px-3 py-2 font-medium">Credits</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#23252E]">
+              {courseData.map((c, i) => (
+                <tr key={i} className="hover:bg-[#16171E] transition-colors">
+                  <td className="px-3 py-2 font-mono text-zinc-300">{c.Course_Code}</td>
+                  <td className="px-3 py-2 font-medium text-zinc-200">{c.Course_Name}</td>
+                  <td className="px-3 py-2 text-zinc-400">{c.department}</td>
+                  <td className="px-3 py-2 font-mono text-zinc-300">{c.Credits} cr</td>
+                  <td className="px-3 py-2 text-zinc-400">{c.Course_Type}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
+      {/* Action Bar */}
+      <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-semibold text-zinc-200">Generate Timetable</h3>
+          <p className="text-[11px] text-zinc-400">Run the conflict-free scheduler once data is saved</p>
+        </div>
 
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setIsClearModalOpen(true)}
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-[#1E1418] transition-colors flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Reset Data</span>
+          </button>
+
+          <button
+            onClick={handleGenerateTimeTable}
+            disabled={isGenerating}
+            className="px-4 py-1.5 rounded-md text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
+          >
+            {isGenerating ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Computing...</span>
+              </>
+            ) : (
+              <>
+                <span>Generate Timetable</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={isClearModalOpen} onOpenChange={setIsClearModalOpen}>
+        <DialogContent className="rounded-xl border border-[#23252E] bg-[#14151A] text-zinc-200 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+              <span>Reset Academic Records?</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400 mt-1 leading-relaxed">
+              This will remove all uploaded faculty, course definitions, and generated timetables for your account.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 flex gap-2">
+            <button
+              onClick={() => setIsClearModalOpen(false)}
+              className="px-3 py-1.5 rounded-md text-xs text-zinc-400 hover:text-zinc-200 hover:bg-[#181920] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleClearAllData}
+              disabled={isClearing}
+              className="px-3 py-1.5 rounded-md text-xs font-medium text-white bg-rose-600 hover:bg-rose-500 transition-colors"
+            >
+              {isClearing ? "Resetting..." : "Yes, Reset Data"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

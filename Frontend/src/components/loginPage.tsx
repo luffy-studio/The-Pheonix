@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@/lib/context/AuthContext";
 import { useRouter } from "next/router";
-import { motion } from "framer-motion";
-// import ForgotPassword from "@/handlers/ForgotPassword";
 import {
   User,
   Lock,
   Mail,
-  Facebook,
-  Github,
-  Linkedin,
-  Chrome,
   ArrowLeft,
   Eye,
   EyeOff,
+  Flame,
 } from "lucide-react";
 import { handleRegister } from "@/handlers/handleRegister";
 import { handleLogin } from "@/handlers/handleLogin";
@@ -21,271 +16,193 @@ import { handleLogin } from "@/handlers/handleLogin";
 const LoginSignupForm: React.FC = () => {
   const router = useRouter();
   const [isActive, setIsActive] = useState(false); // false = login, true = register
-  const [loading, setLoading] = useState(true);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { setIsLoggedIn } = useAuth();
   const forgotPassword = () => router.push("/forgot-password");
   const handleCloseLogin = () => router.push("/");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1500);
-    return () => clearTimeout(timer);
-  }, []);
+  const onLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    setIsSubmitting(true);
+    try {
+      await handleLogin(e, setIsLoggedIn, router);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    setIsSubmitting(true);
+    try {
+      await handleRegister(e, setIsLoggedIn, router);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gradient-to-r from-gray-200 to-indigo-200">
-      {/* Back Button */}
-      <motion.button
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.5 }}
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0E0F12] text-zinc-200">
+      {/* Return link */}
+      <button
         onClick={handleCloseLogin}
-        className="fixed top-6 left-6 z-50 flex items-center space-x-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl shadow-lg hover:bg-white/90 transition-all duration-200"
+        className="fixed top-6 left-6 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-[#181920] transition-colors"
       >
-        <ArrowLeft className="w-5 h-5 text-gray-700" />
-        <span className="text-gray-700 font-medium">Back to Home</span>
-      </motion.button>
+        <ArrowLeft className="w-3.5 h-3.5" />
+        <span>Back to Home</span>
+      </button>
 
-  <div className="hidden md:block relative w-[850px] h-[550px] bg-[#ffffff] rounded-[30px] shadow-2xl overflow-hidden">
-        {/* Login Form */}
-        <div
-          className={`absolute w-1/2 h-full flex translate-x-[-100%] items-center text-center p-10 z-10 transition-all duration-700 ease-in-out ${
-            isActive ? "translate-x-[100%] opacity-0" : "right-0 opacity-100"
-          }`}
-        >
-          <form className="w-full" onSubmit={(e) => handleLogin(e, setIsLoggedIn, router)}>
-            <h1 className="text-3xl font-bold mb-2">Login</h1>
-            <div className="relative my-6">
-              <input
-                type="text"
-                name="username"
-                placeholder="Username"
-                required
-                className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
-              />
-              <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
-            </div>
-            <div className="relative my-6">
-              <input  
-                type={showLoginPassword ? "text" : "password"}
-                name="password"
-                placeholder="Password"
-                required
-                className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
-              />
-              <div
-                className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
-                onClick={() => setShowLoginPassword(!showLoginPassword)}
-              >
-                {showLoginPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </div>
-            </div>
-            <div className="text-sm text-right mb-4">
-              <a onClick={forgotPassword}  className="text-gray-600 hover:underline">
-                Forgot Password?
-              </a>
-            </div>
-            <button className="w-full h-12 bg-indigo-400 rounded-md shadow-md text-white font-semibold">
-              Login
-            </button>
-            <p className="mt-5 text-sm">or login with social platforms</p>
-            <div className="flex justify-center mt-4 space-x-3">
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Chrome />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Facebook />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Github />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Linkedin />
-              </a>
-            </div>
-            <p className="mt-6 text-sm text-gray-600">Don’t have an account?</p>
-            <button
-              type="button"
-              className="mt-2 w-full h-12 border-2 border-indigo-400 text-indigo-400 rounded-md hover:bg-indigo-400 hover:text-white transition"
-              onClick={() => setIsActive(true)}
-            >
-              Register Now
-            </button>
-          </form>
-        </div>
-
-        {/* Blue Background Overlay */}
-        <div
-          className={`absolute top-0 left-0 text-center align-center w-full h-full bg-[#7494ec] rounded-[150px] transition-all duration-[1800ms] ease-in-out z-0 ${
-            isActive ? "-translate-x-1/2" : "translate-x-1/2"
-          }`}
-        ></div>
-
-        {/* Register Form */}
-        <div
-          className={`absolute w-1/2 h-full flex items-center text-center p-10 z-10 transition-all duration-700 ease-in-out ${
-            isActive ? "right-0 opacity-100" : "translate-x-[200%] opacity-0"
-          }`}
-        >
-          <form className="w-full" onSubmit={(e) => handleRegister(e, setIsLoggedIn, router)}>
-            <h1 className="text-3xl font-bold mb-2">Registration</h1>
-            <div className="relative my-6">
-              <input
-                type="text"
-                name="username"
-                placeholder="Username"
-                required
-                className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
-              />
-              <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
-            </div>
-            <div className="relative my-6">
-              <input
-                type="email"
-                name="email"
-                placeholder="Email"
-                required
-                className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
-              />
-              <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
-            </div>
-            <div className="relative my-6">
-              <input
-                type={showRegisterPassword ? "text" : "password"}
-                name="password"
-                placeholder="Password"
-                required
-                className="w-full py-3 pl-5 pr-12 bg-gray-200 rounded-md outline-none text-gray-800 font-medium placeholder-gray-500"
-              />
-              <div
-                className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600"
-                onClick={() => setShowRegisterPassword(!showRegisterPassword)}
-              >
-                {showRegisterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </div>
-            </div>
-            <button className="w-full h-12 bg-indigo-400 rounded-md shadow-md text-white font-semibold" type="submit">
-              Register
-            </button>
-            <p className="mt-5 text-sm">or register with social platforms</p>
-            <div className="flex justify-center mt-4 space-x-3">
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Chrome />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Facebook />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Github />
-              </a>
-              <a href="#" className="p-2 border-2 border-gray-300 rounded-md">
-                <Linkedin />
-              </a>
-            </div>
-            <p className="mt-6 text-sm text-gray-600">Already have an account?</p>
-            <button
-              type="button"
-              className="mt-2 w-full h-12 border-2 border-indigo-400 text-indigo-400 rounded-md hover:bg-indigo-400 hover:text-white transition"
-              onClick={() => setIsActive(false)}
-            >
-              Login Now
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Mobile-first responsive card (keeps original desktop layout above unchanged) */}
-      <div className="block md:hidden w-full max-w-md mx-4 bg-white rounded-2xl shadow-xl p-4 mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">{isActive ? 'Register' : 'Login'}</h2>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setIsActive(false)}
-              className={`px-3 py-1 rounded-md text-sm ${!isActive ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
-              Login
-            </button>
-            <button
-              onClick={() => setIsActive(true)}
-              className={`px-3 py-1 rounded-md text-sm ${isActive ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-700'}`}>
-              Register
-            </button>
+      {/* Main Authentication Card */}
+      <div className="w-full max-w-sm rounded-xl border border-[#23252E] bg-[#14151A] p-6 sm:p-8">
+        {/* Brand Header */}
+        <div className="text-center mb-6">
+          <div className="w-9 h-9 mx-auto rounded-lg bg-indigo-600 flex items-center justify-center text-white mb-2">
+            <Flame className="w-5 h-5" />
           </div>
+          <h1 className="text-xl font-bold text-zinc-100">The Phoenix</h1>
+          <p className="text-xs text-zinc-400 mt-0.5">Sign in to your account</p>
         </div>
 
+        {/* Mode Switcher */}
+        <div className="grid grid-cols-2 p-1 bg-[#181920] rounded-lg border border-[#262833] mb-6">
+          <button
+            type="button"
+            onClick={() => setIsActive(false)}
+            className={`py-1.5 text-xs font-medium rounded-md transition-colors ${
+              !isActive
+                ? "bg-[#232530] text-zinc-100 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsActive(true)}
+            className={`py-1.5 text-xs font-medium rounded-md transition-colors ${
+              isActive
+                ? "bg-[#232530] text-zinc-100 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Register
+          </button>
+        </div>
+
+        {/* Form */}
         {!isActive ? (
-          <form className="w-full" onSubmit={(e) => handleLogin(e, setIsLoggedIn, router)}>
-            <div className="mb-3">
-              <input
-                type="text"
-                name="username"
-                placeholder="Username"
-                required
-                className="w-full py-2 px-3 bg-gray-100 rounded-md outline-none"
-              />
-            </div>
-            <div className="mb-3 relative">
-              <input
-                type={showLoginPassword ? 'text' : 'password'}
-                name="password"
-                placeholder="Password"
-                required
-                className="w-full py-2 px-3 bg-gray-100 rounded-md outline-none"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600" onClick={() => setShowLoginPassword(!showLoginPassword)}>
-                {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          <form onSubmit={onLoginSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">Username</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="username"
+                  placeholder="Username"
+                  required
+                  className="w-full px-3 py-2 pl-9 rounded-lg bg-[#181920] border border-[#262833] text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
               </div>
             </div>
-            <button className="w-full py-2 bg-indigo-500 text-white rounded-md font-medium">Login</button>
-            <div className="mt-3 text-center text-sm text-gray-600">or login with social platforms</div>
-            <div className="flex justify-center mt-3 space-x-3">
-              <a href="#" className="p-2 border rounded-md"><Chrome className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Facebook className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Github className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Linkedin className="w-4 h-4" /></a>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-zinc-300">Password</label>
+                <button
+                  type="button"
+                  onClick={forgotPassword}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  Forgot?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="••••••••"
+                  required
+                  className="w-full px-3 py-2 pl-9 pr-9 rounded-lg bg-[#181920] border border-[#262833] text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  {showLoginPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-2 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
+            >
+              {isSubmitting ? "Signing in..." : "Sign In"}
+            </button>
           </form>
         ) : (
-          <form className="w-full" onSubmit={(e) => handleRegister(e, setIsLoggedIn, router)}>
-            <div className="mb-3">
-              <input
-                type="text"
-                name="username"
-                placeholder="Username"
-                required
-                className="w-full py-2 px-3 bg-gray-100 rounded-md outline-none"
-              />
-            </div>
-            <div className="mb-3">
-              <input
-                type="email"
-                name="email"
-                placeholder="Email"
-                required
-                className="w-full py-2 px-3 bg-gray-100 rounded-md outline-none"
-              />
-            </div>
-            <div className="mb-3 relative">
-              <input
-                type={showRegisterPassword ? 'text' : 'password'}
-                name="password"
-                placeholder="Password"
-                required
-                className="w-full py-2 px-3 bg-gray-100 rounded-md outline-none"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-600" onClick={() => setShowRegisterPassword(!showRegisterPassword)}>
-                {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          <form onSubmit={onRegisterSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">Username</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="username"
+                  placeholder="Username"
+                  required
+                  className="w-full px-3 py-2 pl-9 rounded-lg bg-[#181920] border border-[#262833] text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
               </div>
             </div>
-            <button type="submit" className="w-full py-2 bg-indigo-500 text-white rounded-md font-medium">Register</button>
-            <div className="mt-3 text-center text-sm text-gray-600">or register with social platforms</div>
-            <div className="flex justify-center mt-3 space-x-3">
-              <a href="#" className="p-2 border rounded-md"><Chrome className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Facebook className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Github className="w-4 h-4" /></a>
-              <a href="#" className="p-2 border rounded-md"><Linkedin className="w-4 h-4" /></a>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">Email Address</label>
+              <div className="relative">
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="name@institution.edu"
+                  required
+                  className="w-full px-3 py-2 pl-9 rounded-lg bg-[#181920] border border-[#262833] text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+              </div>
             </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1">Password</label>
+              <div className="relative">
+                <input
+                  type={showRegisterPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Create a password"
+                  required
+                  className="w-full px-3 py-2 pl-9 pr-9 rounded-lg bg-[#181920] border border-[#262833] text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  {showRegisterPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-2 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors disabled:opacity-50"
+            >
+              {isSubmitting ? "Creating account..." : "Create Account"}
+            </button>
           </form>
         )}
       </div>

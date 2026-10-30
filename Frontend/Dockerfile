@@ -4,11 +4,10 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files
-COPY package.json pnpm-lock.yaml* package-lock.json* ./
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm install -g pnpm && \
-    pnpm install --frozen-lockfile || npm ci
+# Install dependencies using standard npm ci
+RUN npm ci
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder

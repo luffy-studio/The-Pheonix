@@ -1,18 +1,26 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
-import { motion } from "framer-motion";
 import { useRouter } from "next/router";
-import AppleNavbar from "@/components/AppNavbar";
+import AppNavbar from "@/components/AppNavbar";
 import PreviewCard from "@/components/PreviewCard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Download, Edit, RefreshCw, Clock, Users, BookOpen, Share2, BarChart3, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
+import {
+  Calendar,
+  Download,
+  Edit,
+  RefreshCw,
+  Clock,
+  Users,
+  BookOpen,
+  Share2,
+  BarChart3,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/context/AuthContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import axios from "axios";
+import { getBackendUrl, getAuthHeaders } from "@/lib/backendApi";
 
 interface Subject {
   id: string;
@@ -53,7 +61,7 @@ interface TeacherWorkload {
   max_capacity: number;
   utilization_percent: number;
   subjects_taught: number;
-  workload_status?: 'overloaded' | 'optimal' | 'underutilized' | 'good';
+  workload_status?: "overloaded" | "optimal" | "underutilized" | "good";
 }
 
 export default function ViewTimetable() {
@@ -66,35 +74,176 @@ export default function ViewTimetable() {
   const [analytics, setAnalytics] = useState<ScheduleAnalytics | null>(null);
   const [teacherWorkload, setTeacherWorkload] = useState<Record<string, TeacherWorkload>>({});
   const [conflicts, setConflicts] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState('timetable');
+  const [activeTab, setActiveTab] = useState<"timetable" | "analytics" | "teachers">("timetable");
+
+  const fetchAnalyticsData = useCallback(async (userId: string) => {
+    try {
+      const backendUrl = getBackendUrl();
+      const headers = getAuthHeaders();
+
+      const [analyticsResponse, workloadResponse, conflictsResponse] = await Promise.allSettled([
+        axios.get(`${backendUrl}/scheduler/analytics/${userId}`, { headers }),
+        axios.get(`${backendUrl}/scheduler/teacher-workload/${userId}`, { headers }),
+        axios.get(`${backendUrl}/scheduler/conflicts/${userId}`, { headers }),
+      ]);
+
+      if (analyticsResponse.status === "fulfilled" && analyticsResponse.value.data?.status === "success") {
+        setAnalytics(analyticsResponse.value.data.data);
+      }
+      if (workloadResponse.status === "fulfilled" && workloadResponse.value.data?.status === "success") {
+        setTeacherWorkload(workloadResponse.value.data.data);
+      }
+      if (conflictsResponse.status === "fulfilled" && conflictsResponse.value.data?.status === "success") {
+        setConflicts(conflictsResponse.value.data.conflicts || []);
+      }
+    } catch (error) {
+      console.error("Error loading analytics:", error);
+    }
+  }, []);
+
+  const fetchTimetableFromSupabase = useCallback(
+    async (userId: string) => {
+      try {
+        const { data: supabaseData, error } = await supabase
+          .from("Timetables_Clg")
+          .select("details")
+          .eq("User_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (error || !supabaseData || supabaseData.length === 0 || !supabaseData[0]?.details) {
+          setStoredData(null);
+          return;
+        }
+
+        const timetableEntries = supabaseData[0].details;
+        let entriesArray: any[] = [];
+
+        if (Array.isArray(timetableEntries)) {
+          entriesArray = timetableEntries;
+        } else if (timetableEntries && typeof timetableEntries === "object") {
+          if (timetableEntries.classes && Array.isArray(timetableEntries.classes)) {
+            entriesArray = timetableEntries.classes;
+          } else if (timetableEntries.entries && Array.isArray(timetableEntries.entries)) {
+            entriesArray = timetableEntries.entries;
+          } else if (timetableEntries.timetable && Array.isArray(timetableEntries.timetable)) {
+            entriesArray = timetableEntries.timetable;
+          } else {
+            try {
+              entriesArray = Object.values(timetableEntries)
+                .flat()
+                .filter((item) => item && typeof item === "object");
+            } catch {
+              entriesArray = [];
+            }
+          }
+        }
+
+        if (!Array.isArray(entriesArray) || entriesArray.length === 0) {
+          setStoredData(null);
+          return;
+        }
+
+        const classSet = new Set<string>();
+        entriesArray.forEach((entry: any) => {
+          if (entry && entry.class_name && typeof entry.class_name === "string") {
+            classSet.add(entry.class_name);
+          }
+        });
+
+        const classes = Array.from(classSet);
+        setAvailableClasses(classes);
+
+        const targetClass = selectedClass || classes[0] || "";
+        if (!selectedClass && classes.length > 0) {
+          setSelectedClass(classes[0]);
+        }
+
+        const currentClassEntries = entriesArray.filter((entry: any) => entry?.class_name === targetClass);
+
+        const formattedTimetableData: { [key: string]: TimetableEntry } = {};
+        const uniqueSubjects = new Map<string, Subject>();
+
+        const colors = [
+          "bg-blue-500",
+          "bg-indigo-500",
+          "bg-violet-500",
+          "bg-emerald-500",
+          "bg-teal-500",
+          "bg-amber-500",
+        ];
+
+        if (currentClassEntries.length > 0) {
+          const selectedClassData = currentClassEntries[0];
+          const schedule = selectedClassData.schedule || [];
+
+          schedule.forEach((scheduleEntry: any) => {
+            if (
+              scheduleEntry &&
+              scheduleEntry.subject &&
+              scheduleEntry.day &&
+              scheduleEntry.period !== undefined
+            ) {
+              const key = `${scheduleEntry.day}-${scheduleEntry.period}`;
+              const subject: Subject = {
+                id: scheduleEntry.subject,
+                name: scheduleEntry.subject,
+                code:
+                  scheduleEntry.subject.length > 4
+                    ? scheduleEntry.subject.substring(0, 4).toUpperCase()
+                    : scheduleEntry.subject.toUpperCase(),
+                color:
+                  colors[
+                    Math.abs(
+                      scheduleEntry.subject.split("").reduce((a: number, b: string) => a + b.charCodeAt(0), 0)
+                    ) % colors.length
+                  ],
+                teacher: scheduleEntry.teacher || "TBA",
+                department: "General",
+              };
+
+              uniqueSubjects.set(scheduleEntry.subject, subject);
+
+              formattedTimetableData[key] = {
+                subject,
+                timeSlot:
+                  scheduleEntry.start_time && scheduleEntry.end_time
+                    ? `${scheduleEntry.start_time} - ${scheduleEntry.end_time}`
+                    : `0${8 + scheduleEntry.period}:00 - 0${9 + scheduleEntry.period}:00`,
+              };
+            }
+          });
+        }
+
+        const formattedData: StoredTimetableData = {
+          subjects: Array.from(uniqueSubjects.values()) as Subject[],
+          timetableData: formattedTimetableData,
+          generatedAt: new Date().toISOString(),
+        };
+
+        setStoredData(formattedData);
+      } catch (err: any) {
+        console.error("Error fetching timetable data:", err?.message || err);
+        setStoredData(null);
+      }
+    },
+    [selectedClass]
+  );
 
   useEffect(() => {
     const fetchTimetableData = async () => {
-      if (!isLoggedIn) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       try {
-        const userId = localStorage.getItem("userId");
-        console.log("User ID from localStorage:", userId);
-        
+        const userId = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
         if (!userId) {
-          console.log("No userId found in localStorage");
           setStoredData(null);
           setLoading(false);
           return;
         }
 
-        // Fetch timetable data and analytics in parallel
-        await Promise.all([
-          fetchTimetableFromSupabase(userId),
-          fetchAnalyticsData(userId)
-        ]);
-
+        await Promise.all([fetchTimetableFromSupabase(userId), fetchAnalyticsData(userId)]);
       } catch (err: any) {
-        console.error('Error fetching data:', err?.message || err);
+        console.error("Error fetching data:", err?.message || err);
         setStoredData(null);
       } finally {
         setLoading(false);
@@ -102,200 +251,11 @@ export default function ViewTimetable() {
     };
 
     fetchTimetableData();
-  }, [isLoggedIn, selectedClass]);
-
-  const fetchAnalyticsData = async (userId: string) => {
-    try {
-      // Load analytics
-      const analyticsResponse = await axios.get(`http://localhost:8000/scheduler/analytics/${userId}`);
-      if (analyticsResponse.data.status === 'success') {
-        setAnalytics(analyticsResponse.data.data);
-      }
-
-      // Load teacher workload
-      const workloadResponse = await axios.get(`http://localhost:8000/scheduler/teacher-workload/${userId}`);
-      if (workloadResponse.data.status === 'success') {
-        setTeacherWorkload(workloadResponse.data.data);
-      }
-
-      // Load conflicts
-      const conflictsResponse = await axios.get(`http://localhost:8000/scheduler/conflicts/${userId}`);
-      if (conflictsResponse.data.status === 'success') {
-        setConflicts(conflictsResponse.data.conflicts || []);
-      }
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-    }
-  };
-
-  const fetchTimetableFromSupabase = async (userId: string) => {
-    try {
-      // Fetch timetable data directly from Supabase
-      const { data: supabaseData, error } = await supabase
-        .from('Timetables_Clg')
-        .select('details')
-        .eq('User_id', userId)
-        .order('timetable_id', { ascending: false })
-        .limit(1);
-      
-      console.log("Supabase query result:", { supabaseData, error, userId });
-      
-      if (error) {
-        console.error('Error fetching timetable data:', error);
-        setStoredData(null);
-        return;
-      }
-
-      if (!supabaseData || supabaseData.length === 0) {
-        console.log("No timetable data found - empty result");
-        setStoredData(null);
-        return;
-      }
-
-      if (!supabaseData[0] || !supabaseData[0].details) {
-        console.log("No details found in first record");
-        setStoredData(null);
-        return;
-      }
-
-      // Extract timetable entries from the details JSONB column
-      const timetableEntries = supabaseData[0].details;
-      
-      console.log("Raw timetable data structure type:", typeof timetableEntries);
-      
-      // Handle different possible data structures
-      let entriesArray = [];
-      if (Array.isArray(timetableEntries)) {
-        entriesArray = timetableEntries;
-      } else if (timetableEntries && typeof timetableEntries === 'object') {
-        // Check for 'classes' property (as seen in the console log)
-        if (timetableEntries.classes && Array.isArray(timetableEntries.classes)) {
-          entriesArray = timetableEntries.classes;
-        } else if (timetableEntries.entries && Array.isArray(timetableEntries.entries)) {
-          entriesArray = timetableEntries.entries;
-        } else if (timetableEntries.timetable && Array.isArray(timetableEntries.timetable)) {
-          entriesArray = timetableEntries.timetable;
-        } else {
-          // If it's a flat object with class keys, convert to array
-          try {
-            const values = Object.values(timetableEntries);
-            entriesArray = values.flat().filter(item => item && typeof item === 'object');
-          } catch (e) {
-            console.error("Error processing timetable object:", e);
-            entriesArray = [];
-          }
-        }
-      }
-      
-      console.log("Processed entries array length:", entriesArray ? entriesArray.length : 'undefined');
-      
-      // Safety check for entriesArray
-      if (!Array.isArray(entriesArray) || entriesArray.length === 0) {
-        console.log("No valid entries found in timetable data");
-        setStoredData(null);
-        return;
-      }
-      
-      // Get all available classes
-      const classSet = new Set<string>();
-      
-      entriesArray.forEach((entry: any, index: number) => {
-        if (entry && entry.class_name && typeof entry.class_name === 'string') {
-          classSet.add(entry.class_name);
-        }
-      });
-      
-      const classes = Array.from(classSet);
-      console.log("Available classes found:", classes);
-      setAvailableClasses(classes);
-      
-      // Set first class as default if no class is selected
-      if (!selectedClass && classes.length > 0) {
-        setSelectedClass(classes[0]);
-      }
-
-      // Filter entries for selected class
-      const targetClass = selectedClass || classes[0];
-      console.log("Filtering for class:", targetClass);
-      
-      const currentClassEntries = entriesArray.filter((entry: any) => {
-        return entry && entry.class_name === targetClass;
-      });
-      
-      console.log("Filtered entries for current class:", currentClassEntries.length, "entries");
-      
-      // Convert backend data to frontend format
-      const formattedTimetableData: { [key: string]: TimetableEntry } = {};
-      const uniqueSubjects = new Map<string, Subject>();
-
-      // Color palette for subjects
-      const colors = [
-        'bg-gradient-to-r from-blue-500 to-purple-500',
-        'bg-gradient-to-r from-green-500 to-blue-500',
-        'bg-gradient-to-r from-purple-500 to-pink-500',
-        'bg-gradient-to-r from-orange-500 to-red-500',
-        'bg-gradient-to-r from-indigo-500 to-purple-500',
-        'bg-gradient-to-r from-teal-500 to-green-500',
-        'bg-gradient-to-r from-pink-500 to-rose-500',
-        'bg-gradient-to-r from-cyan-500 to-blue-500'
-      ];
-
-      // Process the schedule for the selected class
-      if (currentClassEntries.length > 0) {
-        const selectedClassData = currentClassEntries[0]; // Get the first matching class
-        const schedule = selectedClassData.schedule || [];
-        
-        console.log("Processing schedule for class:", selectedClassData.class_name, schedule);
-        
-        schedule.forEach((scheduleEntry: any, index: number) => {
-          // Only log the first few entries to avoid spam
-          if (index < 3) {
-            console.log(`Schedule entry ${index} detailed:`, scheduleEntry);
-          }
-          
-          if (scheduleEntry && scheduleEntry.subject && scheduleEntry.day && scheduleEntry.period !== undefined) {
-            const key = `${scheduleEntry.day}-${scheduleEntry.period}`;
-            const subject: Subject = {
-              id: scheduleEntry.subject,
-              name: scheduleEntry.subject,
-              code: scheduleEntry.subject.length > 3 ? scheduleEntry.subject.substring(0, 3).toUpperCase() : scheduleEntry.subject.toUpperCase(),
-              color: colors[Math.abs(scheduleEntry.subject.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0)) % colors.length],
-              teacher: scheduleEntry.teacher || 'TBA',
-              department: "General"
-            };
-
-            uniqueSubjects.set(scheduleEntry.subject, subject);
-            
-            formattedTimetableData[key] = {
-              subject,
-              timeSlot: scheduleEntry.start_time && scheduleEntry.end_time 
-                ? `${scheduleEntry.start_time}-${scheduleEntry.end_time}`
-                : `${8 + scheduleEntry.period}:00-${9 + scheduleEntry.period}:00`
-            };
-          }
-        });
-      }
-
-      const formattedData: StoredTimetableData = {
-        subjects: Array.from(uniqueSubjects.values()) as Subject[],
-        timetableData: formattedTimetableData,
-        generatedAt: new Date().toISOString(),
-      };
-
-      setStoredData(formattedData);
-    } catch (err: any) {
-      console.error('Error fetching timetable data:', err?.message || err);
-      setStoredData(null);
-    }
-  };
+  }, [fetchTimetableFromSupabase, fetchAnalyticsData]);
 
   const exportTimetable = () => {
-    if (!storedData || !storedData.timetableData) {
-      console.warn("No timetable available for export");
-      return;
-    }
+    if (!storedData || !storedData.timetableData) return;
 
-    // CSV value escaper
     const escapeCsv = (v: any) => {
       if (v === null || v === undefined) return "";
       const s = String(v);
@@ -312,7 +272,7 @@ export default function ViewTimetable() {
       const [day = "", period = ""] = String(key).split("-");
       const time = entry?.timeSlot ?? "";
       const subjectName = entry?.subject?.name ?? entry?.subject ?? "";
-      const teacherName = entry?.subject?.teacher ?? entry?.subject?.teacher ?? "";
+      const teacherName = entry?.subject?.teacher ?? "";
       rows.push([day, period, time, subjectName, teacherName].map(escapeCsv).join(","));
     });
 
@@ -342,69 +302,13 @@ export default function ViewTimetable() {
     }
   };
 
-  const getWorkloadStatusColor = (status?: string) => {
-    switch (status) {
-      case 'overloaded': return 'destructive';
-      case 'optimal': return 'default';
-      case 'good': return 'secondary';
-      case 'underutilized': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
-  const getWorkloadStatusIcon = (status?: string) => {
-    switch (status) {
-      case 'overloaded': return <AlertTriangle className="w-4 h-4" />;
-      case 'optimal': return <CheckCircle className="w-4 h-4" />;
-      case 'good': return <TrendingUp className="w-4 h-4" />;
-      case 'underutilized': return <Clock className="w-4 h-4" />;
-      default: return <Users className="w-4 h-4" />;
-    }
-  };
-
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen gradient-mesh-bg">
-        <AppleNavbar />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="w-20 h-20 gradient-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Calendar className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-hero mb-4">Please Log In</h1>
-            <p className="text-xl text-gray-600 mb-8">
-              You need to be logged in to view your timetable.
-            </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => router.push('/login')}
-              className="interactive-button px-8 py-4 text-white font-semibold text-lg rounded-2xl"
-            >
-              Log In
-            </motion.button>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
   if (loading) {
     return (
-      <div className="min-h-screen gradient-mesh-bg flex items-center justify-center">
-        <div className="text-center">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="w-12 h-12 gradient-primary rounded-2xl flex items-center justify-center mx-auto mb-4"
-          >
-            <RefreshCw className="h-6 w-6 text-white" />
-          </motion.div>
-          <p className="text-gray-600">Loading your beautiful timetable...</p>
+      <div className="min-h-screen bg-[#0E0F12] text-zinc-200 flex items-center justify-center">
+        <div className="p-6 rounded-xl border border-[#23252E] bg-[#14151A] text-center max-w-xs space-y-2">
+          <RefreshCw className="w-5 h-5 animate-spin text-zinc-400 mx-auto" />
+          <h2 className="text-sm font-semibold text-zinc-200">Loading Schedule</h2>
+          <p className="text-xs text-zinc-500">Querying active timetable records...</p>
         </div>
       </div>
     );
@@ -412,30 +316,30 @@ export default function ViewTimetable() {
 
   if (!storedData) {
     return (
-      <div className="min-h-screen gradient-mesh-bg">
-        <AppleNavbar />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="w-20 h-20 gradient-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Calendar className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-hero mb-4">No Timetable Found</h1>
-            <p className="text-xl text-gray-600 mb-8">
-              Generate your first timetable to get started with beautiful scheduling.
+      <div className="min-h-screen bg-[#0E0F12] text-zinc-200">
+        <AppNavbar />
+        <div className="max-w-md mx-auto px-4 py-32 text-center">
+          <div className="p-8 rounded-xl border border-[#23252E] bg-[#14151A] space-y-3">
+            <Calendar className="w-8 h-8 text-zinc-500 mx-auto" />
+            <h2 className="text-base font-bold text-zinc-100">No Timetable Generated</h2>
+            <p className="text-xs text-zinc-400">
+              Upload your faculty and course structure, then generate your first schedule.
             </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => router.push('/create')}
-              className="interactive-button px-8 py-4 text-white font-semibold text-lg rounded-2xl"
-            >
-              Create Timetable
-            </motion.button>
-          </motion.div>
+            <div className="pt-2 flex justify-center gap-2">
+              <button
+                onClick={() => router.push("/create")}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833]"
+              >
+                Setup Data
+              </button>
+              <button
+                onClick={() => router.push("/generate")}
+                className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -444,366 +348,214 @@ export default function ViewTimetable() {
   return (
     <>
       <Head>
-        <title>View Timetable - EduSchedule</title>
-        <meta name="description" content="View your beautiful school timetable with Apple-inspired design" />
+        <title>View Timetables — The Phoenix</title>
+        <meta
+          name="description"
+          content="Review active schedules, conflict validations, and faculty assignments."
+        />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen gradient-mesh-bg">
-        <AppleNavbar />
+      <div className="min-h-screen bg-[#0E0F12] text-zinc-200">
+        <AppNavbar />
 
-        {/* Background Elements */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/3 left-1/3 w-72 h-72 gradient-secondary opacity-10 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/3 right-1/3 w-96 h-96 gradient-primary opacity-15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-        </div>
-
-        {/* Header */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8"
-          >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 pt-24">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 mb-6 border-b border-[#23252E] gap-4">
             <div>
-              <h1 className="text-hero mb-4">
-                Your Perfect
-                <span className="block text-display">Schedule</span>
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
+                Academic Timetable
               </h1>
-              <p className="text-xl text-gray-600 max-w-2xl">
-                Generated on {new Date(storedData.generatedAt).toLocaleDateString()} • 
-                Beautiful, organized, and ready to use.
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                Viewing schedule for cohort{" "}
+                <span className="text-zinc-200 font-semibold">{selectedClass || "Class"}</span> •
+                Generated on {new Date(storedData.generatedAt).toLocaleDateString()}
               </p>
             </div>
 
-            <div className="flex items-center space-x-4 mt-6 lg:mt-0">
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger className="glass-card w-48 border-0">
-                  <SelectValue placeholder="Select class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableClasses.map((className) => (
-                    <SelectItem key={className} value={className}>
-                      {className}
-                    </SelectItem>
+            <div className="flex flex-wrap items-center gap-2">
+              {availableClasses.length > 0 && (
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-[#14151A] border border-[#23252E] text-zinc-200 text-xs font-medium focus:outline-none"
+                >
+                  {availableClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Cohort: {cls}
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              )}
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => router.push('/create')}
-                className="glass-card px-6 py-3 rounded-2xl font-semibold text-gray-700 hover:text-gray-900 transition-colors"
+              <button
+                type="button"
+                onClick={() => router.push("/create")}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-[#181920] hover:bg-[#20222B] border border-[#262833] transition-colors flex items-center gap-1.5"
               >
-                <Edit className="w-5 h-5 mr-2 inline" />
-                Edit
-              </motion.button>
+                <Edit className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Edit Data</span>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <button
+                type="button"
                 onClick={exportTimetable}
-                className="interactive-button px-6 py-3 text-white font-semibold rounded-2xl"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
               >
-                <Download className="w-5 h-5 mr-2 inline" />
-                Export
-              </motion.button>
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV</span>
+              </button>
             </div>
-          </motion.div>
+          </div>
 
-          {/* Validation Issues Alert */}
+          {/* Conflict Alert */}
           {conflicts.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="mb-6"
-            >
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="flex items-start">
-                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 mr-3" />
+            <div className="mb-6 p-3.5 rounded-lg bg-[#24171A] border border-[#44232B] text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-rose-300">Schedule Conflicts Detected</h4>
+                <ul className="mt-1 space-y-0.5 text-rose-200/90 font-mono text-[11px]">
+                  {conflicts.slice(0, 3).map((conflict, i) => (
+                    <li key={i}>• {conflict}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Tabs */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-[#14151A] border border-[#23252E] mb-6 max-w-sm">
+            {[
+              { id: "timetable", label: "Timetable Grid", icon: Calendar },
+              { id: "analytics", label: "Quality Audit", icon: BarChart3 },
+              { id: "teachers", label: "Faculty Load", icon: Users },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                    isActive
+                      ? "bg-[#20222B] text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab 1: Timetable */}
+          {activeTab === "timetable" && (
+            <PreviewCard
+              title={`${selectedClass} Schedule`}
+              timetableData={storedData.timetableData}
+              onExport={exportTimetable}
+              onShare={shareTimetable}
+            />
+          )}
+
+          {/* Tab 2: Analytics */}
+          {activeTab === "analytics" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl border border-[#23252E] bg-[#14151A] space-y-4">
+                <h3 className="text-xs font-semibold text-zinc-200">Schedule Efficiency</h3>
+                <div className="space-y-3">
                   <div>
-                    <h4 className="text-red-800 font-semibold">Schedule Conflicts Detected</h4>
-                    <ul className="mt-2 text-red-700 text-sm space-y-1">
-                      {conflicts.slice(0, 3).map((conflict, index) => (
-                        <li key={index}>• {conflict}</li>
-                      ))}
-                      {conflicts.length > 3 && (
-                        <li className="text-red-600">...and {conflicts.length - 3} more issues</li>
-                      )}
-                    </ul>
+                    <div className="flex justify-between text-xs mb-1 font-mono text-zinc-400">
+                      <span>Average Periods / Class</span>
+                      <span className="text-zinc-100 font-semibold">
+                        {analytics?.schedule_stats?.average_periods_per_class || 0}
+                      </span>
+                    </div>
+                    <Progress
+                      value={(analytics?.schedule_stats?.average_periods_per_class || 0) * 12}
+                      className="h-1.5 bg-[#23252E]"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs mb-1 font-mono text-zinc-400">
+                      <span>Faculty Utilization</span>
+                      <span className="text-zinc-100 font-semibold">
+                        {Object.values(teacherWorkload).length > 0
+                          ? Math.round(
+                              Object.values(teacherWorkload).reduce(
+                                (acc, teacher) => acc + teacher.utilization_percent,
+                                0
+                              ) / Object.values(teacherWorkload).length
+                            )
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        Object.values(teacherWorkload).length > 0
+                          ? Object.values(teacherWorkload).reduce(
+                              (acc, teacher) => acc + teacher.utilization_percent,
+                              0
+                            ) / Object.values(teacherWorkload).length
+                          : 0
+                      }
+                      className="h-1.5 bg-[#23252E]"
+                    />
                   </div>
                 </div>
               </div>
-            </motion.div>
-          )}
 
-          {/* Analytics Summary */}
-          {analytics && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="mb-6"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="glass-card border-0">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Calendar className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Total Classes</p>
-                        <p className="text-2xl font-bold">{analytics.schedule_stats?.total_classes || 0}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-card border-0">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-green-100 rounded-lg">
-                        <Clock className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Total Periods</p>
-                        <p className="text-2xl font-bold">{analytics.schedule_stats?.total_periods_scheduled || 0}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-card border-0">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <BookOpen className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Subjects</p>
-                        <p className="text-2xl font-bold">{analytics.schedule_stats?.unique_subjects || 0}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-card border-0">
-                  <CardContent className="p-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-orange-100 rounded-lg">
-                        <Users className="w-5 h-5 text-orange-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Teachers</p>
-                        <p className="text-2xl font-bold">{analytics.schedule_stats?.unique_teachers || 0}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="p-5 rounded-xl border border-[#23252E] bg-[#14151A] space-y-3 text-xs">
+                <h3 className="font-semibold text-zinc-200">Validation Checks</h3>
+                <div className="space-y-2 font-mono">
+                  <div className="flex items-center justify-between p-2 rounded bg-[#181920] border border-[#23252E]">
+                    <span className="text-zinc-400">Conflict Count</span>
+                    <span className={conflicts.length === 0 ? "text-emerald-400" : "text-rose-400"}>
+                      {conflicts.length === 0 ? "0 (Clean)" : `${conflicts.length} Issues`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-[#181920] border border-[#23252E]">
+                    <span className="text-zinc-400">Method</span>
+                    <span className="text-zinc-300">
+                      {analytics?.generation_method === "smart_scheduler" ? "Smart Engine" : "Standard"}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
-          {/* Tabs for Timetable and Analytics */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 glass-card border-0">
-              <TabsTrigger value="timetable" className="flex items-center space-x-2">
-                <Calendar className="w-4 h-4" />
-                <span>Timetable</span>
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex items-center space-x-2">
-                <BarChart3 className="w-4 h-4" />
-                <span>Analytics</span>
-              </TabsTrigger>
-              <TabsTrigger value="teachers" className="flex items-center space-x-2">
-                <Users className="w-4 h-4" />
-                <span>Teachers</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="timetable" className="mt-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-              >
-                <PreviewCard
-                  title={`${selectedClass} Weekly Schedule`}
-                  timetableData={storedData.timetableData}
-                  onExport={exportTimetable}
-                  onShare={shareTimetable}
-                />
-              </motion.div>
-            </TabsContent>
-
-            <TabsContent value="analytics" className="mt-6">
-              {analytics ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
-                  className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-                >
-                  {/* Schedule Efficiency */}
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <BarChart3 className="w-5 h-5" />
-                        <span>Schedule Efficiency</span>
-                      </CardTitle>
-                      <CardDescription>
-                        Overview of your timetable efficiency metrics
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Periods per Class</span>
-                            <span>{analytics.schedule_stats?.average_periods_per_class || 0}</span>
-                          </div>
-                          <Progress 
-                            value={(analytics.schedule_stats?.average_periods_per_class || 0) * 10} 
-                            className="h-2"
-                          />
-                        </div>
-                        
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span>Teacher Utilization</span>
-                            <span>
-                              {Object.values(teacherWorkload).length > 0 
-                                ? Math.round(Object.values(teacherWorkload).reduce((acc, teacher) => acc + teacher.utilization_percent, 0) / Object.values(teacherWorkload).length)
-                                : 0}%
-                            </span>
-                          </div>
-                          <Progress 
-                            value={Object.values(teacherWorkload).length > 0 
-                              ? Object.values(teacherWorkload).reduce((acc, teacher) => acc + teacher.utilization_percent, 0) / Object.values(teacherWorkload).length
-                              : 0} 
-                            className="h-2"
-                          />
-                        </div>
+          {/* Tab 3: Teachers */}
+          {activeTab === "teachers" && (
+            <div className="rounded-xl border border-[#23252E] bg-[#14151A] p-5 space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-200">Faculty Workload Allocation</h3>
+              <div className="grid gap-2">
+                {Object.entries(teacherWorkload).map(([teacherName, workload]) => (
+                  <div
+                    key={teacherName}
+                    className="p-3 rounded-lg bg-[#181920] border border-[#23252E] space-y-2"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-medium text-zinc-200">{teacherName}</span>
+                        <span className="text-[11px] text-zinc-500 ml-2">
+                          ({workload.subjects_taught} subjects)
+                        </span>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Schedule Quality */}
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
-                        <CheckCircle className="w-5 h-5" />
-                        <span>Schedule Quality</span>
-                      </CardTitle>
-                      <CardDescription>
-                        Quality metrics and validation status
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Conflicts Detected</span>
-                          <Badge variant={conflicts.length > 0 ? "destructive" : "default"}>
-                            {conflicts.length} issues
-                          </Badge>
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Schedule Method</span>
-                          <Badge variant="outline">
-                            {analytics.generation_method === 'smart_scheduler' ? 'Smart' : 'Legacy'}
-                          </Badge>
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Overall Quality</span>
-                          <Badge variant={conflicts.length === 0 ? "default" : "secondary"}>
-                            {conflicts.length === 0 ? 'Excellent' : 'Needs Review'}
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ) : (
-                <Card className="glass-card border-0">
-                  <CardContent className="p-8 text-center">
-                    <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No analytics data available.</p>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-
-            <TabsContent value="teachers" className="mt-6">
-              {Object.keys(teacherWorkload).length > 0 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
-                >
-                  <Card className="glass-card border-0">
-                    <CardHeader>
-                      <CardTitle>Teacher Workload Distribution</CardTitle>
-                      <CardDescription>
-                        Detailed breakdown of teaching assignments and capacity utilization
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {Object.entries(teacherWorkload).map(([teacherName, workload]) => (
-                          <div key={teacherName} className="border rounded-lg p-4 bg-white/50">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                                  {teacherName.charAt(0)}
-                                </div>
-                                <div>
-                                  <h4 className="font-semibold">{teacherName}</h4>
-                                  <p className="text-sm text-gray-600">
-                                    {workload.subjects_taught} subjects assigned
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                {getWorkloadStatusIcon(workload.workload_status)}
-                                <Badge variant={getWorkloadStatusColor(workload.workload_status)}>
-                                  {workload.workload_status || 'unknown'}
-                                </Badge>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>Workload: {workload.current_load}/{workload.max_capacity} hours</span>
-                                <span>{workload.utilization_percent}%</span>
-                              </div>
-                              <Progress 
-                                value={workload.utilization_percent} 
-                                className="h-2"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ) : (
-                <Card className="glass-card border-0">
-                  <CardContent className="p-8 text-center">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No teacher workload data available.</p>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          </Tabs>
+                      <span className="text-[11px] font-mono text-zinc-400">
+                        {workload.current_load} / {workload.max_capacity} hrs ({workload.utilization_percent}%)
+                      </span>
+                    </div>
+                    <Progress value={workload.utilization_percent} className="h-1 bg-[#23252E]" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
