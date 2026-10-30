@@ -3,20 +3,20 @@ const config = {
   content: [
     './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  darkMode: ["selector", 'class'],
+  darkMode: ["class"],
   theme: {
   	extend: {
   		colors: {
+  			obsidian: {
+  				'950': '#060709',
+  				'900': '#0B0D13',
+  				'850': '#0F121C',
+  				'800': '#151926',
+  				'750': '#1C2234',
+  				'700': '#242C43',
+  				'600': '#364163',
+  			},
   			primary: {
-  				'100': '#e6f5e6',
-  				'200': '#c2e0c2',
-  				'300': '#9ecb9e',
-  				'400': '#7ab67a',
-  				'500': '#56a156',
-  				'600': '#3d8c3d',
-  				'700': '#2b772b',
-  				'800': '#1a611a',
-  				'900': '#0a4c0a',
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},
@@ -68,17 +68,26 @@ const config = {
   				'5': 'hsl(var(--chart-5))'
   			}
   		},
-  		backgroundColor: {
-  			'neutral-900': '#171717'
-  		},
-  		textColor: {
-  			'neutral-900': '#171717'
-  		},
   		borderRadius: {
-  			button: '4px',
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		boxShadow: {
+  			'glow-violet': '0 0 50px -10px rgba(139, 92, 246, 0.25)',
+  			'glow-cyan': '0 0 50px -10px rgba(6, 182, 212, 0.25)',
+  			'glow-amber': '0 0 50px -10px rgba(245, 158, 11, 0.25)',
+  			'obsidian': '0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.08)'
+  		},
+  		animation: {
+  			'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+  			'shimmer': 'shimmer 2.5s linear infinite',
+  		},
+  		keyframes: {
+  			shimmer: {
+  				'0%': { backgroundPosition: '-200% 0' },
+  				'100%': { backgroundPosition: '200% 0' }
+  			}
   		}
   	}
   },

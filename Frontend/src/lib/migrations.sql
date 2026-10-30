@@ -1,64 +1,55 @@
--- WARNING: This schema is for context only and is not meant to be run.
--- Table order and constraints may not be valid for execution.
+-- ============================================================================
+-- The Phoenix: Database Schema Reference
+-- Canonical migration is maintained at /migrations/001_initial_schema.sql
+-- ============================================================================
 
-CREATE TABLE public.Scheduled_timetable (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  time timestamp without time zone,
-  Day date,
-  CONSTRAINT Scheduled_timetable_pkey PRIMARY KEY (id)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE public.faculty (
-  name character varying NOT NULL,
-  department character varying,
-  course_type character varying CHECK (course_type::text = ANY (ARRAY['Theory'::character varying, 'Practical'::character varying, 'Field Work'::character varying, 'Lab'::character varying]::text[])),
-  max_credits integer,
-  availability character varying,
-  expertise character varying,
-  Faculity_Iid uuid NOT NULL UNIQUE,
-  CONSTRAINT faculty_pkey PRIMARY KEY (Faculity_Iid),
-  CONSTRAINT faculty_Faculity_Iid_fkey FOREIGN KEY (Faculity_Iid) REFERENCES public.users(id)
+
+CREATE TABLE IF NOT EXISTS public."Faculty_Clg" (
+    faculty_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "User_id" UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    details JSONB NOT NULL DEFAULT '{"teachers": []}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE public.subjects (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL,
-  code character varying,
-  color character varying,
-  teacher character varying,
-  department character varying,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT subjects_pkey PRIMARY KEY (id)
+
+CREATE TABLE IF NOT EXISTS public."Subjects_Clg" (
+    subject_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "User_id" UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    details JSONB NOT NULL DEFAULT '{"subjects": []}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE public.timetable_slots (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  timetable_id uuid,
-  subject_id uuid,
-  day character varying NOT NULL,
-  period integer NOT NULL,
-  start_time time without time zone,
-  end_time time without time zone,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT timetable_slots_pkey PRIMARY KEY (id),
-  CONSTRAINT timetable_slots_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(id),
-  CONSTRAINT timetable_slots_timetable_id_fkey FOREIGN KEY (timetable_id) REFERENCES public.timetables(id)
+
+CREATE TABLE IF NOT EXISTS public."Classes_Clg" (
+    class_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "User_id" UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    details JSONB NOT NULL DEFAULT '{"courses": []}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE public.timetables (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  name character varying NOT NULL,
-  class text,
-  user_id uuid,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT timetables_pkey PRIMARY KEY (id),
-  CONSTRAINT timetables_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+
+CREATE TABLE IF NOT EXISTS public."Timetables_Clg" (
+    timetable_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "User_id" UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    details JSONB NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE TABLE public.users (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  username text NOT NULL,
-  email text NOT NULL UNIQUE,
-  password text NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT users_pkey PRIMARY KEY (id)
-);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_faculty_user_id ON public."Faculty_Clg"("User_id");
+CREATE INDEX IF NOT EXISTS idx_subjects_user_id ON public."Subjects_Clg"("User_id");
+CREATE INDEX IF NOT EXISTS idx_classes_user_id ON public."Classes_Clg"("User_id");
+CREATE INDEX IF NOT EXISTS idx_timetables_user_id ON public."Timetables_Clg"("User_id");
+CREATE INDEX IF NOT EXISTS idx_timetables_created_at ON public."Timetables_Clg"(created_at DESC);

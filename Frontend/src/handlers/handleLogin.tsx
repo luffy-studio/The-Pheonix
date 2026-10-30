@@ -2,8 +2,13 @@ import { loginSchema } from "@/lib/validations/validations";
 
 type SetIsLoggedIn = (value: boolean) => void;
 
-// Current NGROK Backend URL
-const backend = "https://nonmeasurably-ethnogenic-kaylin.ngrok-free.dev";
+const getBackendUrl = () => {
+  return (
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8000"
+  );
+};
 
 export const handleLogin = async (
   event: React.FormEvent<HTMLFormElement>,
@@ -23,6 +28,8 @@ export const handleLogin = async (
     return;
   }
 
+  const backend = getBackendUrl();
+
   try {
     const response = await fetch(`${backend}/auth/login`, {
       method: "POST",
@@ -34,22 +41,26 @@ export const handleLogin = async (
 
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      alert(data?.detail || "Login failed");
+      alert(data?.detail || "Login failed: Invalid credentials.");
       return;
     }
 
     const result = await response.json();
     const userId = result.userId || result.user_id;
+    const token = result.token || result.access_token;
 
-    alert("Login successful!");
     setIsLoggedIn(true);
 
-    localStorage.setItem("isLoggedIn", "true");
-    if (userId) localStorage.setItem("userId", userId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("isLoggedIn", "true");
+      if (userId) localStorage.setItem("userId", userId);
+      if (token) localStorage.setItem("token", token);
+      if (result.username) localStorage.setItem("username", result.username);
+    }
 
     router.push("/");
   } catch (err) {
     console.error("Login request failed:", err);
-    alert("Backend unreachable. Check ngrok is running.");
+    alert(`Backend unreachable at ${backend}. Please ensure the backend server is running.`);
   }
 };

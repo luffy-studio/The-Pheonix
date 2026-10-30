@@ -2,15 +2,13 @@ import { registrationSchema } from "@/lib/validations/validations";
 
 type SetIsLoggedIn = (value: boolean) => void;
 
-// 🔹 Backend URL (abhi ke liye hardcoded NGROK)
-// Chahe to baad me env pe shift kar sakta hai.
-const backend =
-  process.env.NEXT_PUBLIC_BACKEND_URL ??
-  "https://nonmeasurably-ethnogenic-kaylin.ngrok-free.dev";
-
-if (!backend) {
-  console.error("❌ Backend URL missing. Set NEXT_PUBLIC_BACKEND_URL env var.");
-}
+const getBackendUrl = () => {
+  return (
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8000"
+  );
+};
 
 export const handleRegister = async (
   event: React.FormEvent<HTMLFormElement>,
@@ -24,17 +22,14 @@ export const handleRegister = async (
   const email = String(formData.get("email") || "").trim();
   const password = String(formData.get("password") || "").trim();
 
-  // ✅ Zod validation
+  // Validate with Zod
   const validation = registrationSchema.safeParse({ username, email, password });
   if (!validation.success) {
     alert(validation.error.errors.map((e) => e.message).join("\n"));
     return;
   }
 
-  if (!backend) {
-    alert("Backend URL is not configured.");
-    return;
-  }
+  const backend = getBackendUrl();
 
   try {
     const response = await fetch(`${backend}/auth/register`, {
@@ -57,24 +52,21 @@ export const handleRegister = async (
       return;
     }
 
-    // ✅ Expected backend response
     const userId = result.userId || result.user_id;
+    const token = result.token || result.access_token;
 
-    alert("Registration successful!");
     setIsLoggedIn(true);
 
-    try {
+    if (typeof window !== "undefined") {
       localStorage.setItem("isLoggedIn", "true");
-      if (userId) {
-        localStorage.setItem("userId", userId);
-      }
-    } catch (err) {
-      console.warn("Failed to save to localStorage:", err);
+      if (userId) localStorage.setItem("userId", userId);
+      if (token) localStorage.setItem("token", token);
+      if (username) localStorage.setItem("username", username);
     }
 
     router.push("/");
   } catch (err) {
     console.error("Unexpected error during registration:", err);
-    alert("An unexpected error occurred. Please check your network and try again.");
+    alert(`Backend unreachable at ${backend}. Please ensure the backend server is running.`);
   }
 };
