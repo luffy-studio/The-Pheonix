@@ -7,6 +7,9 @@ All notable changes to **THE PHOENIX** academic timetable scheduling platform ar
 ## [1.2.0] - 2026-10-30
 
 ### Fixed
+- **Missing Module Error on Vercel (`Cannot find module '@/lib/backendApi'`):**
+  - Resolved overbroad `lib/` pattern in root `.gitignore` that inadvertently ignored `Frontend/src/lib/`.
+  - Added explicit exception `!Frontend/src/lib/` and committed `Frontend/src/lib/backendApi.ts`.
 - **Vercel Build Failure (`Command "pnpm run build" exited with 1`):**
   - Resolved `ERR_PNPM_IGNORED_BUILDS` caused by strict dependency build enforcement on `unrs-resolver`.
   - Configured `pnpm-workspace.yaml` and `.npmrc` across the workspace with `allowBuilds: { unrs-resolver: true }` and `strictDepBuilds: false`.
