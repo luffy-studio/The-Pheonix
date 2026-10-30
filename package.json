@@ -1,0 +1,14 @@
+{
+  "name": "the-phoenix",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "26.x"
+  },
+  "scripts": {
+    "build": "pnpm --prefix Frontend run build || npm run --prefix Frontend build",
+    "dev": "pnpm --prefix Frontend run dev || npm run --prefix Frontend dev",
+    "start": "pnpm --prefix Frontend run start || npm run --prefix Frontend start",
+    "lint": "pnpm --prefix Frontend run lint || npm run --prefix Frontend lint"
+  }
+}

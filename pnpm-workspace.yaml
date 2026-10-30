@@ -1,0 +1,7 @@
+packages:
+  - 'Frontend'
+
+allowBuilds:
+  unrs-resolver: true
+
+strictDepBuilds: false
