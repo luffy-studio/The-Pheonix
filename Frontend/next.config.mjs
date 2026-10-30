@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
+const isVercel = Boolean(process.env.VERCEL);
+const isDocker = process.env.NEXT_OUTPUT_STANDALONE === "true" || process.env.DOCKER_BUILD === "true";
+
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  output: !isVercel && isDocker ? "standalone" : undefined,
   images: {
     domains: ["assets.co.dev", "images.unsplash.com", "api.dicebear.com"],
   },
